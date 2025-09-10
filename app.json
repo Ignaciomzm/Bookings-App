@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "Salon",
+    "slug": "salon",
+    "scheme": "salon",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "plugins": ["expo-notifications"],
+    "android": {
+      "package": "com.yourname.salon"
+    }
+  }
+}
