@@ -1,0 +1,11 @@
+node_modules/
+.expo/
+dist/
+build/
+coverage/
+*.log
+*.tmp
+*.temp
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
