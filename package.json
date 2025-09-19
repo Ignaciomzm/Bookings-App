@@ -8,8 +8,11 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+"engines": { "node": ">=18 <19", "npm": ">=9 <11" },
 "eas-build-pre-install": "npm config set legacy-peer-deps true && node -v && npm -v"
   },
+"eas-build-pre-install": "npm i -g npm@10.8.1 && npm config set legacy-peer-deps true && node -v && npm -v"
+ },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.4.4",
