@@ -12,7 +12,6 @@ export default function BookingList({ bookings = [], providers = [], onUpdated }
     const base = [...(list || [])];
     const staticProviders = [
       { user_id: 'lucyna', email: 'Lucyna', role: 'staff' },
-      { user_id: 'magda',  email: 'Magda',  role: 'staff' },
       { user_id: 'ewa',    email: 'Ewa',    role: 'staff' },
     ];
     staticProviders.forEach(sp => {

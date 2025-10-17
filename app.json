@@ -1,13 +1,24 @@
 {
   "expo": {
-    "name": "Salon",
-    "slug": "salon",
-    "scheme": "salon",
+    "name": "Salon V2",
+    "slug": "salon-v2",
+    "scheme": "triosalonv2",
     "version": "1.0.0",
     "orientation": "portrait",
-    "plugins": ["expo-notifications"],
+    "plugins": [
+      "expo-notifications",
+      "expo-localization",
+      "expo-sqlite"
+    ],
+    "owner": "ignacio.mzm",
+    "platforms": ["ios", "android"],
     "android": {
-      "package": "com.yourname.salon"
+      "package": "triobookings.v2"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "36a0991e-fbd8-4d23-9111-6ec2b5158f2d"
+      }
     }
   }
 }

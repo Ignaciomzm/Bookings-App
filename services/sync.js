@@ -8,7 +8,6 @@ import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from './supabase';
 // ---------- Provider mapping (fill these in .env when ready) ----------
 const STATIC_PROVIDER_MAP = {
   lucyna: process.env.EXPO_PUBLIC_PROVIDER_LUCYNA_UID || null,
-  magda:  process.env.EXPO_PUBLIC_PROVIDER_MAGDA_UID  || null,
   ewa:    process.env.EXPO_PUBLIC_PROVIDER_EWA_UID    || null,
 };
 
@@ -154,7 +153,7 @@ async function syncItems(items, markFn) {
       if (!resolvedProvider) {
         console.log(
           `[SYNC] Booking ${it.id} is waiting for provider mapping. ` +
-          `Set EXPO_PUBLIC_PROVIDER_LUCYNA_UID / MAGDA_UID / EWA_UID in .env if applicable.`
+          `Set EXPO_PUBLIC_PROVIDER_LUCYNA_UID / EWA_UID in .env if applicable.`
         );
         continue; // leave as 'pending'
       }
