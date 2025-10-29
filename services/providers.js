@@ -12,7 +12,7 @@ export async function fetchProviders() {
     .order('email', { ascending: true });
 
   if (error) {
-    console.log('fetchProviders error', error.message);
+    console.error('fetchProviders error', error.message);
     return [];
   }
   return data || [];

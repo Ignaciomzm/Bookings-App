@@ -89,7 +89,7 @@ export function initLocalDb() {
   if (hasSQLite && db) {
     initSqlite();
   } else {
-    console.log('SQLite not available; using AsyncStorage fallback.');
+    console.info('SQLite not available; using AsyncStorage fallback.');
   }
 }
 
@@ -151,7 +151,7 @@ async function syncItems(items, markFn) {
 
       // If unresolved (e.g., you haven't provided UUIDs yet), keep it pending and continue
       if (!resolvedProvider) {
-        console.log(
+        console.warn(
           `[SYNC] Booking ${it.id} is waiting for provider mapping. ` +
           `Set EXPO_PUBLIC_PROVIDER_LUCYNA_UID / EWA_UID in .env if applicable.`
         );
@@ -197,7 +197,7 @@ async function syncItems(items, markFn) {
 
       await markFn(it.id, 'synced');
     } catch (e) {
-      console.log('[SYNC ERROR]', e?.message || e);
+      console.error('[SYNC ERROR]', e?.message || e);
       await markFn(it.id, 'failed');
     }
   }
