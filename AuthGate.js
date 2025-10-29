@@ -15,15 +15,6 @@ import {
 import { supabase } from './supabase';
 import { useSettings } from './SettingsContext';
 
-const devOnlyLog = (...args) => {
-  const isDev =
-    (typeof __DEV__ !== 'undefined' && __DEV__) ||
-    (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production');
-  if (isDev) {
-    console.log(...args);
-  }
-};
-
 export default function AuthGate({ children }) {
   const { devAutoLogin, setDevAutoLogin } = useSettings();
   const [ready, setReady] = useState(false);
@@ -49,19 +40,19 @@ useEffect(() => {
 
     // HARDCODED ADMIN CREDENTIALS FOR DEV AUTO-LOGIN
     const email = 'josemunoz@outlook.com.au';
-    const password = 'Nthhmzm0989'; // REPLACE THIS WITH YOUR ACTUAL PASSWORD
+    const password = 'Nthhmzm0989'; // ⚠️ REPLACE THIS WITH YOUR ACTUAL PASSWORD
 
-    devOnlyLog('Dev auto-login: Attempting to sign in as admin...');
+    console.log('🔐 Dev auto-login: Attempting to sign in as admin...');
 
     // Try sign-in first
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     
     if (error) {
-      devOnlyLog('Dev auto-login failed:', error.message);
+      console.log('❌ Dev auto-login failed:', error.message);
       return;
     }
     
-    devOnlyLog('Dev auto-login successful as admin!');
+    console.log('✅ Dev auto-login successful as admin!');
     
     // Ensure user has admin role in profiles table
     if (data?.user?.id) {
@@ -75,7 +66,7 @@ useEffect(() => {
         });
       
       if (profileError) {
-        devOnlyLog('Profile update warning:', profileError.message);
+        console.log('⚠️ Profile update warning:', profileError.message);
       }
     }
   })();

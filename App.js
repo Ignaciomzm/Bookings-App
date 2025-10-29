@@ -1,5 +1,5 @@
 // mobile/App.js
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useContext, createContext, useRef, useMemo } from 'react';
 import {
   Alert,
   Modal,
@@ -14,11 +14,13 @@ import {
   TouchableOpacity,
   View,
   ActivityIndicator,
+  Share,
   AppState,
   KeyboardAvoidingView,
   FlatList,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
+import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import * as Linking from 'expo-linking';
 import { Ionicons } from '@expo/vector-icons';
 import { NavigationContainer, useFocusEffect, DefaultTheme } from '@react-navigation/native';
@@ -27,143 +29,419 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { supabase } from './supabase';
 import CalendarWeekGrid from './CalendarWeekGrid';
-import { lightenColor } from './utils/color';
-import { SettingsProvider, useSettings } from './context/SettingsContext';
-import BigBtn from './components/BigBtn';
-import Card from './components/Card';
-import CustomAlert from './components/CustomAlert';
-import SettingsModal from './components/SettingsModal';
-import ScreenScaffold from './components/ScreenScaffold';
-import BaseInput from './components/Input';
-import BaseTimeInput from './components/TimeInput';
-import KeyboardAwareScrollView from './components/KeyboardAwareScrollView';
-import BookingsScreen from './screens/BookingsScreen';
-import ManageBookingScreen from './screens/ManageBookingScreen';
-import NewBookingScreen from './screens/NewBookingScreen';
-import ServicesScreen from './screens/ServicesScreen';
-import AdminScreen from './screens/AdminScreen';
-import { useCustomAlert } from './hooks/useCustomAlert';
-import { useSchedulerData } from './hooks/useSchedulerData';
-import { usePasswordVisibility } from './hooks/usePasswordVisibility';
-import {
-  makeLink,
-  POLAND_PREFIX,
-  currency,
-  dateLabel,
-  timeLabel,
-  withPolandPrefix,
-} from './utils/format';
 // Helps KeyboardAvoidingView clear the top bar/safe area
 const KEYBOARD_OFFSET = Platform.select({ ios: 120, android: 60 });
-const FALLBACK_STAFF_COLORS = ['#1d342e', '#c7a864', '#7b8277', '#b18190', '#567d8a', '#d67c5d'];
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
 
-const Input = React.forwardRef((props, ref) => (
-  <BaseInput ref={ref} baseStyle={styles.input} focusedStyle={styles.inputFocused} {...props} />
-));
 
-const TimeInput = React.forwardRef((props, ref) => (
-  <BaseTimeInput ref={ref} baseStyle={styles.timeInput} focusedStyle={styles.timeInputFocused} {...props} />
-));
+/* ===================== Settings (i18n + dev toggle) ===================== */
+const SettingsContext = createContext(null);
+const useSettings = () => useContext(SettingsContext);
 
+function SettingsProvider({ children }) {
+  const [lang, setLang] = useState('en');
+  const [devAutoLogin, setDevAutoLogin] = useState(false);
 
-// Horizontal Week Navigation Component
-function WeekNavigator({ selectedDate, onDateSelect, t }) {
-  const { lang } = useSettings();
-  const [weekDates, setWeekDates] = useState([]);
-
-  useEffect(() => {
-    generateWeekDates();
-  }, [selectedDate]);
-
-  const generateWeekDates = () => {
-    const dates = [];
-    const startOfWeek = new Date(selectedDate);
-    const dayOfWeek = startOfWeek.getDay();
-    const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Monday start
-    startOfWeek.setDate(startOfWeek.getDate() + diff);
-
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(startOfWeek);
-      date.setDate(startOfWeek.getDate() + i);
-      dates.push(date);
-    }
-    setWeekDates(dates);
+  const dict = {
+    en: {
+      bookings: 'Upcoming',
+      newBooking: 'New Booking',
+      services: 'Services',
+      calendar: 'Calendar',
+      admin: 'Admin',
+      profileSettings: 'Account & Settings',
+      changeEmail: 'Email',
+      language: 'Language',
+      close: 'Close',
+      save: 'Save',
+      delete: 'Delete',
+      edit: 'Edit',
+      cancel: 'Cancel',
+      upcoming: 'Upcoming',
+      past: 'Past',
+      client: 'Client',
+      clientName: 'Client name',
+      phone: 'Phone',
+      emailOptional: 'Email (optional)',
+      service: 'Service',
+      chooseService: 'Choose service',
+      durationMin: 'Duration (min)',
+      staff: 'Staff',
+      apptTime: 'Appointment time',
+      date: 'Date',
+      time: 'Time',
+      notesOptional: 'Notes (optional)',
+      saveBooking: 'Save booking',
+      saveChanges: 'Save changes',
+      addService: 'Add service',
+      editServices: 'Edit Services',
+      typeOfService: 'Type of service',
+      pricePLN: 'Price (PLN)',
+      duration: 'Duration (min)',
+      durationHours: 'Hours',
+      durationMinutes: 'Minutes',
+      today: 'Today',
+      prev: 'Prev',
+      next: 'Next',
+      saved: 'Changes saved',
+      bookingSaved: 'Booking saved',
+      bookingDeleted: 'Booking deleted',
+      serviceAdded: 'Service added',
+      serviceRemoved: 'Service removed',
+      timeUnavailable: 'That time is already taken for this stylist.',
+      clientNameRequired: 'Client name is required',
+      dateRequired: 'Date is required',
+      timeRequired: 'Time is required',
+      pastTimeNotAllowed: 'Cannot book appointments in the past',
+      signIn: 'Sign In',
+      signUp: 'Sign Up',
+      haveAccount: 'Have an account?',
+      needAccount: "Don't have an account?",
+      email: 'Email',
+      password: 'Password',
+      fullName: 'Full name (optional)',
+      signOut: 'Sign Out',
+      forgotPassword: 'Forgot password?',
+      resetPassword: 'Reset Password',
+      newPassword: 'New password',
+      confirm: 'Confirm',
+      users: 'Users',
+      makeAdmin: 'Make admin',
+      makeStaff: 'Make staff',
+      disable: 'Disable',
+      enable: 'Enable',
+      stats: 'Stats',
+      searchUsers: 'Search users',
+      sendReset: 'Send reset email',
+      deleteProfile: 'Delete profile row',
+      viewBookings: "View user's bookings",
+      exportAll: 'Export ALL bookings (CSV)',
+      exportUser: 'Export this user (CSV)',
+      previewAs: 'Preview as this user',
+      stopPreview: 'Stop preview',
+      noBookings: 'No bookings found.',
+      addUser: 'Add user',
+      role: 'Role',
+      name: 'Name',
+      emailProfiles: 'Email (profiles)',
+      phoneProfiles: 'Phone',
+      // Calendar Views
+      daily: 'Daily',
+      schedule: 'Schedule',
+      monthly: 'Monthly',
+      calendarView: 'View',
+      navigation: 'Navigation',
+      previous: 'Previous',
+      next: 'Next',
+      proximityWarning: 'Booking in 30 minutes',
+    },
+    pl: {
+      bookings: 'Nadchodzące',
+      newBooking: 'Nowa rezerwacja',
+      services: 'Uslugi',
+      calendar: 'Kalendarz',
+      admin: 'Admin',
+      profileSettings: 'Konto i ustawienia',
+      changeEmail: 'Email',
+      language: 'Jezyk',
+      close: 'Zamknij',
+      save: 'Zapisz',
+      delete: 'Usun',
+      edit: 'Edytuj',
+      cancel: 'Anuluj',
+      upcoming: 'Nadchodzace',
+      past: 'Przeszle',
+      client: 'Klient',
+      clientName: 'Imie i nazwisko',
+      phone: 'Telefon',
+      emailOptional: 'Email (opcjonalnie)',
+      service: 'Usluga',
+      chooseService: 'Wybierz usluge',
+      pricePLN: 'Cena (PLN)',
+      duration: 'Czas (min)',
+      durationMin: 'Czas (min)',
+      durationHours: 'Godziny',
+      durationMinutes: 'Minuty',
+      staff: 'Personel',
+      apptTime: 'Termin wizyty',
+      date: 'Data',
+      time: 'Godzina',
+      notesOptional: 'Notatki (opcjonalnie)',
+      saveBooking: 'Zapisz rezerwacje',
+      saveChanges: 'Zapisz zmiany',
+      addService: 'Dodaj usluge',
+      editServices: 'Edytuj uslugi',
+      typeOfService: 'Rodzaj uslugi',
+      today: 'Dzisiaj',
+      prev: 'Wstecz',
+      next: 'Dalej',
+      saved: 'Zapisano zmiany',
+      bookingSaved: 'Rezerwacja zapisana',
+      bookingDeleted: 'Usunieto rezerwacje',
+      serviceAdded: 'Dodano usluge',
+      serviceRemoved: 'Usunieto usluge',
+      timeUnavailable: 'Ten termin jest juz zajety dla tego stylisty.',
+      clientNameRequired: 'Imie klienta jest wymagane',
+      dateRequired: 'Data jest wymagana',
+      timeRequired: 'Czas jest wymagany',
+      pastTimeNotAllowed: 'Nie mozna rezerwowac wizyt w przeszlosci',
+      signIn: 'Zaloguj',
+      signUp: 'Zarejestruj',
+      haveAccount: 'Masz konto?',
+      needAccount: 'Nie masz konta?',
+      email: 'Email',
+      password: 'Haslo',
+      fullName: 'Imie i nazwisko (opcjonalnie)',
+      signOut: 'Wyloguj',
+      forgotPassword: 'Zapomniales hasla?',
+      resetPassword: 'Ustaw haslo',
+      newPassword: 'Nowe haslo',
+      confirm: 'Potwierdz',
+      users: 'Uzytkownicy',
+      makeAdmin: 'Nadaj admina',
+      makeStaff: 'Nadaj staff',
+      disable: 'Wylacz',
+      enable: 'Wlacz',
+      stats: 'Statystyki',
+      searchUsers: 'Szukaj uzytkownikow',
+      sendReset: 'Wyslij email resetu',
+      deleteProfile: 'Usun rekord profilu',
+      viewBookings: 'Pokaz rezerwacje uzytkownika',
+      exportAll: 'Eksport wszystkich rezerwacji (CSV)',
+      exportUser: 'Eksport tego uzytkownika (CSV)',
+      previewAs: 'Podejrzyj jako uzytkownik',
+      stopPreview: 'Zakoncz podglad',
+      noBookings: 'Brak rezerwacji.',
+      addUser: 'Dodaj uzytkownika',
+      role: 'Rola',
+      name: 'Imie i nazwisko',
+      emailProfiles: 'Email (profil)',
+      phoneProfiles: 'Telefon',
+      // Calendar Views
+      daily: 'Dzienny',
+      schedule: 'Harmonogram',
+      monthly: 'Miesięczny',
+      calendarView: 'Widok',
+      navigation: 'Nawigacja',
+      previous: 'Poprzedni',
+      next: 'Następny',
+      proximityWarning: 'Rezerwacja za 30 minut',
+    },
   };
 
-  const isToday = (date) => {
-    const today = new Date();
-    return (
-      date.getDate() === today.getDate() &&
-      date.getMonth() === today.getMonth() &&
-      date.getFullYear() === today.getFullYear()
-    );
+  const t = (k, vars) => {
+    const s = (dict[lang][k] ?? k);
+    if (!vars) return s;
+    return Object.entries(vars).reduce((acc, [kk, v]) => acc.replaceAll(`{${kk}}`, String(v)), s);
   };
-
-  const isSelected = (date) => {
-    return (
-      date.getDate() === selectedDate.getDate() &&
-      date.getMonth() === selectedDate.getMonth() &&
-      date.getFullYear() === selectedDate.getFullYear()
-    );
-  };
-
-  const dayLabels = useMemo(() => {
-    const locale = lang === 'pl' ? 'pl-PL' : 'en-US';
-    const monday = new Date(selectedDate);
-    const dayOfWeek = monday.getDay();
-    const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-    monday.setDate(monday.getDate() + diff);
-
-    return Array.from({ length: 7 }, (_, idx) => {
-      const labelDate = new Date(monday);
-      labelDate.setDate(monday.getDate() + idx);
-      return labelDate
-        .toLocaleDateString(locale, { weekday: 'short' })
-        .replace(/\.$/, '')
-        .toUpperCase();
-    });
-  }, [lang, selectedDate]);
 
   return (
-    <View style={styles.weekNavigator}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.weekScrollContent}>
-        {weekDates.map((date, index) => {
-          const today = isToday(date);
-          const selected = isSelected(date);
-          return (
-            <TouchableOpacity
-              key={index}
-              style={[
-                styles.weekDayItem,
-                today && styles.weekDayItemToday,
-                selected && styles.weekDayItemSelected,
-              ]}
-              onPress={() => onDateSelect(date)}
-            >
-              <Text style={[
-                styles.weekDayLabel,
-                (today || selected) && styles.weekDayLabelActive,
-              ]}>
-                {dayLabels[index]}
-              </Text>
-              <Text style={[
-                styles.weekDayNumber,
-                (today || selected) && styles.weekDayNumberActive,
-              ]}>
-                {date.getDate()}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+    <SettingsContext.Provider value={{ t, lang, setLang, devAutoLogin, setDevAutoLogin }}>
+      {children}
+    </SettingsContext.Provider>
+  );
+}
+
+function BigBtn({ text, onPress, kind = 'default', style: st }) {
+  const base =
+    kind === 'danger'
+      ? [styles.bigBtn, { backgroundColor: '#B91C1C' }]
+      : [styles.bigBtn, { backgroundColor: '#1d342e' }];
+  const color = '#fff';
+  return (
+    <Pressable onPress={onPress} style={[...base, st]}>
+      <Text style={{ color, fontWeight: '800', fontSize: 18 }} numberOfLines={1}>
+        {text}
+      </Text>
+    </Pressable>
+  );
+}
+
+function Card({ title, children }) {
+  return (
+    <View style={styles.card}>
+      {title ? <Text style={styles.cardTitle}>{title}</Text> : null}
+      {children}
     </View>
   );
 }
 
+// Custom attractive alert modal
+function CustomAlert({ visible, title, message, type = 'info', buttons = [], onClose }) {
+  const getIconAndColor = (type) => {
+    switch (type) {
+      case 'success':
+        return { icon: '✓', color: '#10B981', bgColor: '#ECFDF5' };
+      case 'error':
+        return { icon: '⚠', color: '#EF4444', bgColor: '#FEF2F2' };
+      case 'warning':
+        return { icon: '⚠', color: '#F59E0B', bgColor: '#FFFBEB' };
+      case 'confirm':
+        return { icon: '?', color: '#1d342e', bgColor: '#EEF2FF' };
+      default:
+        return { icon: 'ℹ', color: '#3B82F6', bgColor: '#EFF6FF' };
+    }
+  };
+
+  const { icon, color, bgColor } = getIconAndColor(type);
+
+  if (!visible) return null;
+
+  return (
+    <Modal visible={visible} transparent animationType="fade">
+      <Pressable style={styles.customAlertOverlay} onPress={onClose}>
+        <Pressable style={styles.customAlertContainer} onPress={(e) => e.stopPropagation()}>
+          {/* Icon */}
+          <View style={[styles.customAlertIcon, { backgroundColor: bgColor }]}>
+            <Text style={[styles.customAlertIconText, { color }]}>{icon}</Text>
+          </View>
+          
+          {/* Title */}
+          <Text style={styles.customAlertTitle}>{title}</Text>
+          
+          {/* Message */}
+          {message && <Text style={styles.customAlertMessage}>{message}</Text>}
+          
+          {/* Buttons */}
+          <View style={styles.customAlertButtons}>
+            {buttons.length > 0 ? buttons.map((button, index) => (
+              <Pressable
+                key={index}
+                style={[
+                  styles.customAlertButton,
+                  button.style === 'cancel' && styles.customAlertButtonCancel,
+                  button.style === 'destructive' && styles.customAlertButtonDestructive,
+                  index > 0 && { marginLeft: 12 }
+                ]}
+                onPress={() => {
+                  if (button.onPress) button.onPress();
+                  if (onClose) onClose();
+                }}
+              >
+                <Text style={[
+                  styles.customAlertButtonText,
+                  button.style === 'cancel' && styles.customAlertButtonTextCancel,
+                  button.style === 'destructive' && styles.customAlertButtonTextDestructive,
+                ]}>
+                  {button.text}
+                </Text>
+              </Pressable>
+            )) : (
+              <Pressable style={styles.customAlertButton} onPress={onClose}>
+                <Text style={styles.customAlertButtonText}>OK</Text>
+              </Pressable>
+            )}
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const Input = React.forwardRef((props, ref) => {
+  const [isFocused, setIsFocused] = useState(false);
+  
+  return (
+    <TextInput 
+      ref={ref} 
+      {...props} 
+      style={[
+        styles.input, 
+        isFocused && styles.inputFocused,
+        props.style
+      ]} 
+      placeholderTextColor="#9AA3AF"
+      returnKeyType="next"
+      blurOnSubmit={false}
+      onFocus={(e) => {
+        setIsFocused(true);
+        props.onFocus?.(e);
+      }}
+      onBlur={(e) => {
+        setIsFocused(false);
+        props.onBlur?.(e);
+      }}
+    />
+  );
+});
+
+const TimeInput = React.forwardRef((props, ref) => {
+  const [isFocused, setIsFocused] = useState(false);
+  
+  const handleFocus = (e) => {
+    setIsFocused(true);
+    
+    // Add a small delay to ensure keyboard is visible, then scroll
+    setTimeout(() => {
+      if (ref?.current) {
+        ref.current.scrollIntoView && ref.current.scrollIntoView({ behavior: 'smooth' });
+      }
+    }, 300);
+    
+    props.onFocus?.(e);
+  };
+  
+  return (
+    <TextInput 
+      ref={ref} 
+      {...props} 
+      style={[
+        styles.timeInput, 
+        isFocused && styles.timeInputFocused,
+        props.style
+      ]} 
+      placeholderTextColor="#9AA3AF"
+      keyboardType="numeric"
+      selectTextOnFocus={true}
+      returnKeyType="next"
+      blurOnSubmit={false}
+      onFocus={handleFocus}
+      onBlur={(e) => {
+        setIsFocused(false);
+        props.onBlur?.(e);
+      }}
+    />
+  );
+});
+
 // Enhanced wrapper for better keyboard handling
+const KeyboardAwareScrollView = ({ children, style, ...props }) => {
+  return (
+    <KeyboardAvoidingView 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'padding'} 
+      style={[{ flex: 1 }, style]}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 160 : 100}
+      enabled={true}
+    >
+      <ScrollView 
+        contentContainerStyle={[styles.scroll, { paddingBottom: 300 }]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+        contentInsetAdjustmentBehavior={Platform.OS === 'ios' ? 'automatic' : 'never'}
+        scrollEventThrottle={16}
+        keyboardDismissMode="interactive"
+        {...props}
+      >
+        {children}
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+};
+
+/* =============================== Helpers & Constants =============================== */
+const APP_SCHEME = 'triosalon';
+const makeLink = (path = '/') => `${APP_SCHEME}://${String(path).replace(/^\//, '')}`;
+
+const POLAND_PREFIX = '+48 ';
+const currency = (n) => `PLN ${Number(n || 0).toFixed(2)}`;
+const timeLabel = (d) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+const dateLabel = (d) => d.toLocaleDateString();
+const withPolandPrefix = (txt) =>
+  !txt?.startsWith('+48') ? POLAND_PREFIX + (txt || '').replace(/^[+\d\s]*/, '') : txt;
+
 const notify = (title, msg = '') => {
   try {
     Alert.alert(title, msg);
@@ -212,6 +490,54 @@ function UserAvatarButton({ user, staff, onPress, accessibilityLabel }) {
   );
 }
 
+function ScreenScaffold({
+  title,
+  subtitle,
+  children,
+  onOpenSettings,
+  user,
+  staff,
+  actionSlot,
+  leftAction,  // ADD THIS LINE
+  isSyncing,
+}) {
+  return (
+    <SafeAreaView style={styles.screenRoot}>
+      <View style={styles.screenHeaderWrapper}>
+        <View style={styles.screenHeader}>
+          <View style={styles.screenHeading}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              {leftAction}
+              <Text style={styles.screenTitle}>{title}</Text>
+            </View>
+            {subtitle ? <Text style={styles.screenSubtitle}>{subtitle}</Text> : null}
+          </View>
+          <View style={styles.screenHeaderActions}>
+            {isSyncing ? (
+              <View style={styles.syncBadge}>
+                <ActivityIndicator size="small" color="#1d342e" />
+                <Text style={styles.syncBadgeText}>Syncing</Text>
+              </View>
+            ) : null}
+            {actionSlot}
+            <TouchableOpacity
+              onPress={onOpenSettings}
+              style={styles.headerCircleButton}
+              accessibilityRole="button"
+              accessibilityLabel="Open settings"
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Ionicons name="settings-outline" size={20} color="#0f172a" />
+            </TouchableOpacity>
+            {null}
+          </View>
+        </View>
+      </View>
+      <View style={styles.screenContent}>{children}</View>
+    </SafeAreaView>
+  );
+}
+
 function AuthScreen({ onLoggedIn }) {
   const { t, lang, setLang } = useSettings();
   const [mode, setMode] = useState('signin');
@@ -222,7 +548,7 @@ function AuthScreen({ onLoggedIn }) {
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [busy, setBusy] = useState(false);
-  const passwordVisibility = usePasswordVisibility();
+  const [showPassword, setShowPassword] = useState(false);
 
   const signIn = async () => {
     if (!email || !password) return Alert.alert('Error', 'Enter email and password.');
@@ -258,7 +584,7 @@ function AuthScreen({ onLoggedIn }) {
     const resetLink = makeLink('/password-reset');
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: resetLink });
     if (error) return Alert.alert('Failed to send reset link', error.message);
-    Alert.alert('Email sent', 'Open the link from your email? it will return you here to set a new password.');
+    Alert.alert('Email sent', 'Open the link from your email — it will return you here to set a new password.');
   };
 
   return (
@@ -305,19 +631,19 @@ function AuthScreen({ onLoggedIn }) {
 
           <Text style={styles.label}>{t('password')}</Text>
           <View style={styles.passwordContainer}>
-            <Input
+            <Input 
               style={styles.passwordInput}
-              placeholder="********"
-              secureTextEntry={passwordVisibility.secure}
-              value={password}
-              onChangeText={setPassword}
+              placeholder="••••••••" 
+              secureTextEntry={!showPassword} 
+              value={password} 
+              onChangeText={setPassword} 
               onSubmitEditing={mode === 'signin' ? signIn : signUp}
             />
-            <Pressable
-              style={styles.eyeButton}
-              onPress={passwordVisibility.toggle}
+            <Pressable 
+              style={styles.eyeButton} 
+              onPress={() => setShowPassword(!showPassword)}
             >
-              <Text style={styles.eyeIcon}>{passwordVisibility.visible ? 'HIDE' : 'SHOW'}</Text>
+              <Text style={styles.eyeIcon}>{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
             </Pressable>
           </View>
 
@@ -346,9 +672,11 @@ function AuthScreen({ onLoggedIn }) {
 /* ============================== Reset Password Screen ============================== */
 function ResetPasswordScreen({ onResetDone }) {
   const { t, lang } = useSettings();
+  const [viewMode, setViewMode] = useState('weekly'); // 'daily', 'weekly', 'monthly'
+const [showViewMenu, setShowViewMenu] = useState(false);
   const [newPass, setNewPass] = useState('');
   const [busy, setBusy] = useState(false);
-  const passwordVisibility = usePasswordVisibility();
+  const [showPassword, setShowPassword] = useState(false);
 
   const submit = async () => {
     if (!newPass || newPass.length < 6) return Alert.alert('Error', 'Password must be at least 6 characters.');
@@ -373,36 +701,1772 @@ function ResetPasswordScreen({ onResetDone }) {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.authCard}>
-            <Text style={styles.authTitle}>{t('resetPassword')}</Text>
-            <Text style={styles.label}>{t('newPassword')}</Text>
-            <View style={styles.passwordContainer}>
-              <Input
-                style={styles.passwordInput}
-                placeholder="********"
-                secureTextEntry={passwordVisibility.secure}
-                value={newPass}
-                onChangeText={setNewPass}
-                onSubmitEditing={submit}
-              />
-              <Pressable
-                style={styles.eyeButton}
-                onPress={passwordVisibility.toggle}
-              >
-                <Text style={styles.eyeIcon}>{passwordVisibility.visible ? 'HIDE' : 'SHOW'}</Text>
-              </Pressable>
-            </View>
-            <View style={{ marginTop: 12 }}>
-              <BigBtn text={busy ? '...' : t('confirm')} kind="primary" onPress={submit} />
-            </View>
-            {busy ? <View style={{ marginTop: 12 }}><ActivityIndicator /></View> : null}
+          <Text style={styles.authTitle}>{t('resetPassword')}</Text>
+          <Text style={styles.label}>{t('newPassword')}</Text>
+          <View style={styles.passwordContainer}>
+            <Input 
+              style={styles.passwordInput}
+              placeholder="••••••••" 
+              secureTextEntry={!showPassword} 
+              value={newPass} 
+              onChangeText={setNewPass} 
+              onSubmitEditing={submit}
+            />
+            <Pressable 
+              style={styles.eyeButton} 
+              onPress={() => setShowPassword(!showPassword)}
+            >
+              <Text style={styles.eyeIcon}>{showPassword ? '👁️' : '👁️‍🗨️'}</Text>
+            </Pressable>
           </View>
+          <View style={{ marginTop: 12 }}>
+            <BigBtn text={busy ? '...' : t('confirm')} kind="primary" onPress={submit} />
+          </View>
+          {busy ? <View style={{ marginTop: 12 }}><ActivityIndicator /></View> : null}
+        </View>
         </ScrollView>
       </SafeAreaView>
     </KeyboardAvoidingView>
   );
 }
 
+/* ============================== Screens ============================== */
+function BookingsScreen({ bookings, services, staff, onEdit, onDelete, showAlert }) {
+  const { t } = useSettings();
+  const now = Date.now();
+
+  const full = bookings.map((b) => {
+    const start = new Date(b.start_at);
+    const svc = services.find((s) => s.id === b.service_id) || null;
+    const stf = staff.find((s) => s.id === b.staff_id) || null;
+    return {
+      ...b,
+      start,
+      serviceName: svc?.name ?? '—',
+      servicePrice: svc?.price ?? 0,
+      staffName: stf?.name ?? '—',
+    };
+  });
+
+  const upcoming = full.filter((b) => b.start.getTime() >= now).sort((a, b) => a.start - b.start);
+  const past = full.filter((b) => b.start.getTime() < now).sort((a, b) => b.start - a.start);
+
+const Row = ({ item }) => {
+  // Check if booking is deleted or modified
+  const isDeleted = item.status === 'deleted';
+  const isModified = item.modified_at && item.created_at && 
+    new Date(item.modified_at).getTime() !== new Date(item.created_at).getTime();
+  
+  return (
+    <View style={[
+      styles.scheduleCard,
+      isDeleted && { opacity: 0.6, backgroundColor: '#F9FAFB' }
+    ]}>
+      <View style={{ flex: 1, gap: 4 }}>
+        {/* Client Name with Status Badges */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <Text style={styles.bookingClient}>{item.client_name}</Text>
+          
+          {/* DELETED BADGE */}
+          {isDeleted && (
+            <View style={{
+              backgroundColor: '#FEE2E2',
+              paddingHorizontal: 8,
+              paddingVertical: 4,
+              borderRadius: 6,
+              borderWidth: 1,
+              borderColor: '#EF4444',
+            }}>
+              <Text style={{
+                color: '#B91C1C',
+                fontSize: 11,
+                fontWeight: '700',
+                textTransform: 'uppercase',
+                letterSpacing: 0.5,
+              }}>
+                🔴 Deleted
+              </Text>
+            </View>
+          )}
+          
+          {/* MODIFIED BADGE */}
+          {isModified && !isDeleted && (
+            <View style={{
+              backgroundColor: '#FEF3C7',
+              paddingHorizontal: 8,
+              paddingVertical: 4,
+              borderRadius: 6,
+              borderWidth: 1,
+              borderColor: '#F59E0B',
+            }}>
+              <Text style={{
+                color: '#92400E',
+                fontSize: 11,
+                fontWeight: '700',
+                textTransform: 'uppercase',
+                letterSpacing: 0.5,
+              }}>
+                🟡 Modified
+              </Text>
+            </View>
+          )}
+        </View>
+
+        <Text style={[
+          styles.bookingSubBig,
+          isDeleted && { color: '#9CA3AF' }
+        ]}>
+          {dateLabel(item.start)} {timeLabel(item.start)} • {item.duration_min ?? 60} min
+        </Text>
+        <Text style={[
+          styles.bookingService,
+          isDeleted && { color: '#D1D5DB' }
+        ]}>
+          {item.serviceName} • {currency(item.servicePrice)}
+        </Text>
+        <Text style={[
+          styles.bookingSub,
+          isDeleted && { color: '#D1D5DB' }
+        ]}>{item.staffName}</Text>
+        <Text style={[
+          styles.bookingSub,
+          isDeleted && { color: '#D1D5DB' }
+        ]}>
+          {item.client_phone}{item.client_email ? ` • ${item.client_email}` : ''}
+        </Text>
+        {item.note ? (
+          <Text style={[
+            styles.bookingNote,
+            isDeleted && { color: '#D1D5DB' }
+          ]}>
+            "{item.note}"
+          </Text>
+        ) : null}
+      </View>
+
+      <View style={{ justifyContent: 'center', gap: 8 }}>
+        {!isDeleted && <BigBtn text={t('edit')} onPress={() => onEdit(item)} />}
+        {!isDeleted && (
+          <BigBtn
+            text={t('delete')}
+            kind="danger"
+            onPress={() =>
+              showAlert(
+                t('delete'), 
+                'Are you sure?', 
+                'confirm', 
+                [
+                  { text: t('cancel'), style: 'cancel' },
+                  { text: t('delete'), style: 'destructive', onPress: () => onDelete(item.id) }
+                ]
+              )
+            }
+          />
+        )}
+        {isDeleted && (
+          <View style={{
+            padding: 12,
+            backgroundColor: '#F3F4F6',
+            borderRadius: 8,
+            alignItems: 'center',
+          }}>
+            <Text style={{
+              fontSize: 12,
+              color: '#6B7280',
+              fontWeight: '600',
+            }}>
+              Deleted
+            </Text>
+          </View>
+        )}
+      </View>
+    </View>
+  );
+};
+
+  return (
+    <ScrollView contentContainerStyle={styles.scroll}>
+      <Card title={t('upcoming')}>
+        {upcoming.length === 0 ? <Text style={styles.empty}>—</Text> : upcoming.map((b) => <Row key={b.id} item={b} />)}
+      </Card>
+      <Card title={t('past')}>
+        {past.length === 0 ? <Text style={styles.empty}>—</Text> : past.map((b) => <Row key={b.id} item={b} />)}
+      </Card>
+    </ScrollView>
+  );
+}
+
+function ManageBookingScreen({ booking, services, staff, onSave, onDelete, onBack, showAlert, checkTimeConflict }) {
+  const { t, lang } = useSettings();
+
+  const [title, setTitle] = useState(booking?.note ?? '');
+  const [clientName, setClientName] = useState(booking?.client_name ?? '');
+  const [clientPhone, setClientPhone] = useState(withPolandPrefix(booking?.client_phone ?? POLAND_PREFIX));
+  const [serviceId, setServiceId] = useState(booking?.service_id ?? services[0]?.id);
+  const [staffId, setStaffId] = useState(booking?.staff_id ?? staff[0]?.id);
+  const [showServiceDropdown, setShowServiceDropdown] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [showMonthDropdown, setShowMonthDropdown] = useState(false);
+  const [showYearDropdown, setShowYearDropdown] = useState(false);
+  const initialEmail = booking?.client_email ?? null;
+
+const today = new Date();
+const initDate = booking?.start_at ? new Date(booking.start_at) : new Date(today.getFullYear(), today.getMonth(), today.getDate(), 10, 30, 0, 0);
+const [date, setDate] = useState(initDate);
+  
+  // Separate state for input text to allow proper editing
+  const [hourText, setHourText] = useState(initDate.getHours().toString().padStart(2, '0'));
+  const [minuteText, setMinuteText] = useState(initDate.getMinutes().toString().padStart(2, '0'));
+
+  const [durationMin, setDurationMin] = useState(
+    booking?.duration_min ?? (services.find((s) => s.id === serviceId)?.duration_min || 60)
+  );
+
+  // Update all form fields when booking prop changes
+  useEffect(() => {
+    if (booking) {
+      setTitle(booking.note ?? '');
+      setClientName(booking.client_name ?? '');
+      setClientPhone(withPolandPrefix(booking.client_phone ?? POLAND_PREFIX));
+      setServiceId(booking.service_id ?? services[0]?.id);
+      setStaffId(booking.staff_id ?? staff[0]?.id);
+      setDurationMin(booking.duration_min ?? (services.find((s) => s.id === booking.service_id)?.duration_min || 60));
+      
+      if (booking.start_at) {
+        const bookingDate = new Date(booking.start_at);
+        setDate(bookingDate);
+        setTime(bookingDate);
+        setHourText(bookingDate.getHours().toString().padStart(2, '0'));
+        setMinuteText(bookingDate.getMinutes().toString().padStart(2, '0'));
+      }
+    }
+  }, [booking, services, staff]);
+
+  const onDateChange = (_e, d) => d && setDate(d);
+  const onTimeChange = (_e, d) => d && setTime(d);
+
+  const openAndroidDate = () => DateTimePickerAndroid.open({ value: date, mode: 'date', onChange: onDateChange });
+  const openAndroidTime = () => DateTimePickerAndroid.open({ value: time, mode: 'time', is24Hour: true, onChange: onTimeChange });
+
+  // Language-aware date formatting
+  const formatDate = (date) => {
+    const months = lang === 'pl' 
+      ? ['Sty', 'Lut', 'Mar', 'Kwi', 'Maj', 'Cze', 'Lip', 'Sie', 'Wrz', 'Paź', 'Lis', 'Gru']
+      : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    const day = date.getDate();
+    const month = months[date.getMonth()];
+    const year = date.getFullYear();
+    
+    return `${day} ${month} ${year}`;
+  };
+
+  const formatTime = (time) => {
+    const hours = time.getHours().toString().padStart(2, '0');
+    const minutes = time.getMinutes().toString().padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
+
+  const submit = async () => {
+    if (!clientName.trim()) {
+      showAlert(t('error'), t('clientNameRequired'), 'error');
+      return;
+    }
+
+    if (!clientPhone.trim() || clientPhone === POLAND_PREFIX) {
+      showAlert(t('error'), t('phoneRequired'), 'error');
+      return;
+    }
+
+    const combinedDateTime = new Date(date);
+    combinedDateTime.setHours(parseInt(hourText, 10) || 0, parseInt(minuteText, 10) || 0, 0, 0);
+
+    const payload = {
+      id: booking.id, // Include the booking ID for update
+      clientName: clientName.trim(),
+      clientPhone: clientPhone.trim(),
+      clientEmail: initialEmail,
+      staffId,
+      serviceId,
+      durationMin,
+      startISO: combinedDateTime.toISOString(),
+      title: title.trim() || null,
+    };
+
+    const success = await onSave(payload);
+    if (success && onBack) {
+      onBack();
+    }
+  };
+
+  const handleDelete = () => {
+    showAlert(
+      t('delete'), 
+      'Are you sure you want to delete this booking?', 
+      'confirm', 
+      [
+        { text: t('cancel'), style: 'cancel' },
+        { 
+          text: t('delete'), 
+          style: 'destructive', 
+          onPress: () => {
+            onDelete(booking.id);
+            if (onBack) onBack();
+          }
+        }
+      ]
+    );
+  };
+
+  return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: 300 }]}>
+
+        <Card title={t('client')}>
+          <Text style={styles.label}>
+            {t('clientName')} <Text style={styles.requiredMark}>*</Text>
+          </Text>
+          <TextInput
+            style={[styles.input, !clientName.trim() && styles.inputRequired]}
+            value={clientName}
+            onChangeText={setClientName}
+            placeholder="Jane Doe"
+            placeholderTextColor="#9CA3AF"
+          />
+          <Text style={styles.label}>{t('phone')}</Text>
+          <TextInput
+            style={[styles.input, (!clientPhone.trim() || clientPhone === POLAND_PREFIX) && styles.inputRequired]}
+            value={clientPhone}
+            onChangeText={setClientPhone}
+            placeholder="+48"
+            placeholderTextColor="#9CA3AF"
+            keyboardType="phone-pad"
+          />
+        </Card>
+
+        <Card title={t('service')}>
+          <Text style={styles.label}>{t('chooseService')}</Text>
+          
+          <View style={styles.customDropdownContainer}>
+            <Pressable 
+              style={styles.customDropdownButton} 
+              onPress={() => setShowServiceDropdown(!showServiceDropdown)}
+            >
+              <View style={styles.customDropdownButtonContent}>
+                <View style={{ flex: 1 }}>
+                  {(() => {
+                    const selectedService = services.find(s => s.id === serviceId);
+                    if (!selectedService) return <Text style={styles.customDropdownPlaceholder}>Select a service</Text>;
+                    
+                    const hours = Math.floor(selectedService.duration_min / 60);
+                    const minutes = selectedService.duration_min % 60;
+                    const timeLabel = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+                    
+                    return (
+                      <View>
+                        <Text style={styles.customDropdownSelectedName}>{selectedService.name}</Text>
+                        <Text style={styles.customDropdownSelectedDuration}>{timeLabel}</Text>
+                      </View>
+                    );
+                  })()}
+                </View>
+                <Text style={styles.customDropdownArrow}>{showServiceDropdown ? '▲' : '▼'}</Text>
+              </View>
+            </Pressable>
+            
+            {showServiceDropdown && (
+              <ScrollView style={styles.customDropdownList} nestedScrollEnabled={true}>
+                {services.map((service) => {
+                  const hours = Math.floor(service.duration_min / 60);
+                  const minutes = service.duration_min % 60;
+                  const timeLabel = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+                  const isSelected = service.id === serviceId;
+                  
+                  return (
+                    <Pressable
+                      key={service.id}
+                      style={[
+                        styles.customDropdownItem,
+                        isSelected && styles.customDropdownItemSelected
+                      ]}
+                      onPress={() => {
+                        setServiceId(service.id);
+                        setDurationMin(service.duration_min);
+                        setShowServiceDropdown(false);
+                      }}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={[
+                          styles.customDropdownItemName,
+                          isSelected && styles.customDropdownItemNameSelected
+                        ]}>
+                          {service.name}
+                        </Text>
+                        <Text style={[
+                          styles.customDropdownItemDuration,
+                          isSelected && styles.customDropdownItemDurationSelected
+                        ]}>
+                          {timeLabel}
+                        </Text>
+                      </View>
+                      {isSelected && <Text style={styles.customDropdownCheckmark}>✓</Text>}
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </View>
+        </Card>
+
+        <Card title={t('staff')}>
+          <View style={styles.staffRow}>
+            {staff.length === 0 && <Text>No staff found. Check database.</Text>}
+            {staff.map((s) => (
+              <Pressable
+                key={s.id}
+                onPress={() => setStaffId(s.id)}
+                style={[
+                  styles.staffChip,
+                  {
+                    borderColor: staffId === s.id ? (s.color || '#1d342e') : '#E5E7EB',
+                    backgroundColor: staffId === s.id ? `${s.color || '#1d342e'}18` : '#fff',
+                  },
+                ]}
+              >
+                <View style={[styles.dot, { backgroundColor: s.color || '#1d342e' }]} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.staffName, staffId === s.id && { color: s.color || '#1d342e' }]} numberOfLines={1}>
+                    {s.name}
+                  </Text>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        </Card>
+
+        <Card title={t('apptTime')}>
+          <Text style={styles.label}>{t('date')}</Text>
+          <TouchableOpacity onPress={Platform.OS === 'android' ? openAndroidDate : () => setShowCalendar(true)} style={styles.input}>
+            <Text style={styles.inputText}>{formatDate(date)}</Text>
+          </TouchableOpacity>
+
+          <Text style={styles.label}>{t('time')}</Text>
+          <View style={styles.timeInputContainer}>
+            <TextInput
+              style={[styles.timeInput, styles.inputFocused]}
+              value={hourText}
+              onChangeText={setHourText}
+              placeholder="10"
+              placeholderTextColor="#9CA3AF"
+              keyboardType="number-pad"
+              maxLength={2}
+              onBlur={() => {
+                const hour = parseInt(hourText, 10);
+                if (isNaN(hour) || hour < 0 || hour > 23) {
+                  setHourText('10');
+                } else {
+                  setHourText(hour.toString().padStart(2, '0'));
+                }
+              }}
+            />
+            <Text style={styles.timeSeparator}>:</Text>
+            <TextInput
+              style={[styles.timeInput, styles.inputFocused]}
+              value={minuteText}
+              onChangeText={setMinuteText}
+              placeholder="30"
+              placeholderTextColor="#9CA3AF"
+              keyboardType="number-pad"
+              maxLength={2}
+              onBlur={() => {
+                const minute = parseInt(minuteText, 10);
+                if (isNaN(minute) || minute < 0 || minute > 59) {
+                  setMinuteText('30');
+                } else {
+                  setMinuteText(minute.toString().padStart(2, '0'));
+                }
+              }}
+            />
+          </View>
+        </Card>
+
+        <Card title={t('notesOptional')}>
+          <TextInput
+            style={[styles.input, { minHeight: 80 }]}
+            value={title}
+            onChangeText={setTitle}
+            placeholder={t('notesPlaceholder')}
+            placeholderTextColor="#9CA3AF"
+            multiline
+            textAlignVertical="top"
+          />
+        </Card>
+
+        {/* Action buttons */}
+        <View style={styles.manageBookingActions}>
+          <BigBtn text="Update Booking" onPress={submit} />
+          <BigBtn text={t('delete')} kind="danger" onPress={handleDelete} />
+        </View>
+
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+function NewBookingScreen({ services, staff, onSave, initial, onSaved, showAlert, checkTimeConflict, navigation, route, setEditBooking }) {
+  const { t, lang } = useSettings();
+
+  const [title, setTitle] = useState(initial?.note ?? '');
+  const [clientName, setClientName] = useState(initial?.client_name ?? '');
+  const [clientPhone, setClientPhone] = useState(withPolandPrefix(initial?.client_phone ?? POLAND_PREFIX));
+  const [serviceId, setServiceId] = useState(initial?.service_id ?? services[0]?.id);
+  const [staffId, setStaffId] = useState(initial?.staff_id ?? staff[0]?.id);
+  const [showServiceDropdown, setShowServiceDropdown] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [showMonthDropdown, setShowMonthDropdown] = useState(false);
+  const [showYearDropdown, setShowYearDropdown] = useState(false);
+  const initialEmail = initial?.client_email ?? null;
+
+const initDate = initial?.start_at ? new Date(initial.start_at) : new Date();
+  
+// Set default time to 10:30 for new bookings and ensure it's today
+if (!initial?.start_at) {
+  const today = new Date();
+  initDate.setFullYear(today.getFullYear(), today.getMonth(), today.getDate());
+  initDate.setHours(10, 30, 0, 0);
+}
+  
+  const [date, setDate] = useState(initDate);
+  const [time, setTime] = useState(initDate);
+  
+  // Separate state for input text to allow proper editing
+  const [hourText, setHourText] = useState(initDate.getHours().toString().padStart(2, '0'));
+  const [minuteText, setMinuteText] = useState(initDate.getMinutes().toString().padStart(2, '0'));
+
+  // Ref for auto-focusing client name input
+  const clientNameInputRef = useRef(null);
+  const hourInputRef = useRef(null);
+  const minuteInputRef = useRef(null);
+
+  // Auto-focus on client name input when component mounts
+  useEffect(() => {
+    if (clientNameInputRef.current) {
+      const timer = setTimeout(() => {
+        clientNameInputRef.current.focus();
+      }, 100); // Small delay to ensure the component is fully rendered
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  // Function to check and show conflict alert when time or staff changes
+  const checkAndAlertConflict = async (selectedStaffId, selectedTime) => {
+    // Disable real-time conflict checking - only check when saving
+    // This prevents blocking users from entering times during input
+    return;
+  };
+
+  // Check for conflicts when staff changes
+  useEffect(() => {
+    if (staffId && time) {
+      checkAndAlertConflict(staffId, time);
+    }
+  }, [staffId]);
+
+  // Check for conflicts when time changes
+  useEffect(() => {
+    if (staffId && time) {
+      checkAndAlertConflict(staffId, time);
+    }
+  }, [time]);
+
+  const [durationMin, setDurationMin] = useState(
+    initial?.duration_min ?? (services.find((s) => s.id === serviceId)?.duration_min || 60)
+  );
+
+  // Update all form fields when initial booking changes
+  useEffect(() => {
+    if (initial) {
+      // Update all form fields with the booking data
+      setTitle(initial.note ?? '');
+      setClientName(initial.client_name ?? '');
+      setClientPhone(withPolandPrefix(initial.client_phone ?? POLAND_PREFIX));
+      setServiceId(initial.service_id ?? services[0]?.id);
+      setStaffId(initial.staff_id ?? staff[0]?.id);
+      setDurationMin(initial.duration_min ?? (services.find((s) => s.id === initial.service_id)?.duration_min || 60));
+      
+      if (initial.start_at) {
+        const initialDate = new Date(initial.start_at);
+        setDate(initialDate);
+        setTime(initialDate);
+        setHourText(initialDate.getHours().toString().padStart(2, '0'));
+        setMinuteText(initialDate.getMinutes().toString().padStart(2, '0'));
+      }
+    } else {
+      // Reset form for new booking
+      setTitle('');
+      setClientName('');
+      setClientPhone(POLAND_PREFIX);
+      setServiceId(services[0]?.id);
+      setStaffId(staff[0]?.id);
+      setDurationMin(services.find((s) => s.id === services[0]?.id)?.duration_min || 60);
+      
+      const newDate = new Date();
+      newDate.setHours(10, 30, 0, 0);
+      setDate(newDate);
+      setTime(newDate);
+      setHourText('10');
+      setMinuteText('30');
+    }
+  }, [initial, services, staff]);
+
+  useEffect(() => {
+    if (!initial) {
+      const d = services.find((s) => s.id === serviceId)?.duration_min || 60;
+      setDurationMin(d);
+    }
+  }, [serviceId]); // eslint-disable-line
+
+  // Clear edit booking when navigating to NewBooking from drawer (not from edit button)
+  useFocusEffect(
+    React.useCallback(() => {
+      // If we're focusing on this screen and it's not from an edit action, clear edit state
+      if (!route.params?.isEditing && setEditBooking) {
+        setEditBooking(null);
+      }
+      // Reset the isEditing parameter for future navigations
+      if (route.params?.isEditing && navigation) {
+        navigation.setParams({ isEditing: undefined });
+      }
+    }, [route.params?.isEditing, setEditBooking, navigation])
+  );
+
+  const onDateChange = (_e, d) => d && setDate(d);
+  const onTimeChange = (_e, d) => d && setTime(d);
+
+  const openAndroidDate = () => DateTimePickerAndroid.open({ value: date, mode: 'date', onChange: onDateChange });
+  const openAndroidTime = () => DateTimePickerAndroid.open({ value: time, mode: 'time', is24Hour: true, onChange: onTimeChange });
+
+  // Language-aware date formatting
+  const formatDate = (date) => {
+    const months = lang === 'pl' 
+      ? ['Sty', 'Lut', 'Mar', 'Kwi', 'Maj', 'Cze', 'Lip', 'Sie', 'Wrz', 'Paź', 'Lis', 'Gru']
+      : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    const day = date.getDate();
+    const month = months[date.getMonth()];
+    const year = date.getFullYear();
+    
+    return `${day} ${month} ${year}`;
+  };
+
+  const formatTime = (time) => {
+    const hours = time.getHours().toString().padStart(2, '0');
+    const minutes = time.getMinutes().toString().padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
+
+  // Generate calendar days
+  const generateCalendarDays = () => {
+    const today = new Date();
+    const currentMonth = date.getMonth();
+    const currentYear = date.getFullYear();
+    
+    const firstDay = new Date(currentYear, currentMonth, 1);
+    const lastDay = new Date(currentYear, currentMonth + 1, 0);
+    const startDate = new Date(firstDay);
+    
+    // Adjust for Monday as first day (0=Sunday, 1=Monday, etc.)
+    const dayOfWeek = firstDay.getDay();
+    const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Sunday becomes 6, Monday becomes 0
+    startDate.setDate(startDate.getDate() - mondayOffset);
+    
+    const days = [];
+    for (let i = 0; i < 42; i++) { // 6 weeks * 7 days
+      const day = new Date(startDate);
+      day.setDate(startDate.getDate() + i);
+      days.push(day);
+    }
+    
+    return days;
+  };
+
+  const timeSlots = [
+    '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+    '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
+    '15:00', '15:30', '16:00', '16:30', '17:00', '17:30'
+  ];
+
+  const handleSave = async () => {
+    // Validate staff selection FIRST
+if (!staffId) {
+  showAlert(
+    lang === 'pl' ? 'Błąd' : 'Error',
+    lang === 'pl' ? 'Wybierz personel' : 'Please select a staff member',
+    'error'
+  );
+  return;
+}    // Validate that client name is not empty
+    if (!clientName || clientName.trim() === '') {
+      showAlert(
+        lang === 'pl' ? 'Błąd' : 'Error',
+        t('clientNameRequired'),
+        'error'
+      );
+      return;
+    }
+
+    // Validate that date is selected
+    if (!date) {
+      showAlert(
+        lang === 'pl' ? 'Błąd' : 'Error',
+        t('dateRequired'),
+        'error'
+      );
+      return;
+    }
+
+    // Validate that time is selected
+    if (!time) {
+      showAlert(
+        lang === 'pl' ? 'Błąd' : 'Error',
+        t('timeRequired'),
+        'error'
+      );
+      return;
+    }
+
+// Validate that the selected date/time is not in the past
+const start = new Date(date);
+start.setHours(parseInt(hourText, 10) || 0, parseInt(minuteText, 10) || 0, 0, 0);
+    
+    const now = new Date();
+    if (start < now) {
+      showAlert(
+        lang === 'pl' ? 'Błąd' : 'Error',
+        t('pastTimeNotAllowed'),
+        'warning'
+      );
+      return;
+    }
+
+    const ok = await onSave({
+      id: initial?.id,
+      title,
+      clientName: clientName.trim(),
+      clientPhone,
+      clientEmail: initialEmail,
+      staffId,
+      serviceId,
+      durationMin: Number(durationMin || 60),
+      startISO: start.toISOString(),
+    });
+
+    if (ok && typeof onSaved === 'function') {
+      onSaved();
+    }
+  };
+
+  return (
+    <KeyboardAwareScrollView>
+      <Card title={t('client')}>
+          <Text style={styles.label}>
+            {t('clientName')} <Text style={styles.requiredMark}>*</Text>
+          </Text>
+          <Input 
+            ref={clientNameInputRef}
+            value={clientName} 
+            onChangeText={setClientName} 
+            placeholder="Jane Doe"
+            autoFocus={true}
+            style={!clientName || clientName.trim() === '' ? styles.inputRequired : null}
+          />
+
+          <Text style={styles.label}>{t('phone')}</Text>
+          <Input
+            value={clientPhone}
+            onChangeText={(val) => setClientPhone(withPolandPrefix(val))}
+            keyboardType="phone-pad"
+            placeholder="+48 555 555 555"
+          />
+
+        </Card>
+
+        <Card title={t('service')}>
+          <Text style={styles.label}>{t('chooseService')}</Text>
+          
+          <View style={styles.customDropdownContainer}>
+            <Pressable 
+              style={styles.customDropdownButton} 
+              onPress={() => setShowServiceDropdown(!showServiceDropdown)}
+            >
+              <View style={styles.customDropdownButtonContent}>
+                <View style={{ flex: 1 }}>
+                  {(() => {
+                    const selectedService = services.find(s => s.id === serviceId);
+                    if (!selectedService) return <Text style={styles.customDropdownPlaceholder}>Select a service</Text>;
+                    
+                    const hours = Math.floor(selectedService.duration_min / 60);
+                    const minutes = selectedService.duration_min % 60;
+                    const timeLabel = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+                    
+                    return (
+                      <View>
+                        <Text style={styles.customDropdownSelectedName}>{selectedService.name}</Text>
+                        <Text style={styles.customDropdownSelectedDuration}>{timeLabel}</Text>
+                      </View>
+                    );
+                  })()}
+                </View>
+                <Text style={styles.customDropdownArrow}>{showServiceDropdown ? '▲' : '▼'}</Text>
+              </View>
+            </Pressable>
+            
+            {showServiceDropdown && (
+              <ScrollView style={styles.customDropdownList} nestedScrollEnabled={true}>
+                {services.map((service) => {
+                  const hours = Math.floor(service.duration_min / 60);
+                  const minutes = service.duration_min % 60;
+                  const timeLabel = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+                  const isSelected = service.id === serviceId;
+                  
+                  return (
+                    <Pressable
+                      key={service.id}
+                      style={[
+                        styles.customDropdownItem,
+                        isSelected && styles.customDropdownItemSelected
+                      ]}
+                      onPress={() => {
+                        setServiceId(service.id);
+                        setShowServiceDropdown(false);
+                      }}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={[
+                          styles.customDropdownItemName,
+                          isSelected && styles.customDropdownItemNameSelected
+                        ]}>
+                          {service.name}
+                        </Text>
+                        <Text style={[
+                          styles.customDropdownItemDuration,
+                          isSelected && styles.customDropdownItemDurationSelected
+                        ]}>
+                          {timeLabel}
+                        </Text>
+                      </View>
+                      {isSelected && <Text style={styles.customDropdownCheckmark}>✓</Text>}
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </View>
+        </Card>
+
+        <Card title={t('staff')}>
+          <View style={styles.staffRow}>
+            {staff.map((s) => (
+              <Pressable
+                key={s.id}
+                onPress={() => setStaffId(s.id)}
+                style={[
+                  styles.staffChip,
+                  {
+                    borderColor: staffId === s.id ? (s.color || '#1d342e') : '#E5E7EB',
+                    backgroundColor: staffId === s.id ? `${s.color || '#1d342e'}18` : '#fff',
+                  },
+                ]}
+              >
+                <View style={[styles.dot, { backgroundColor: s.color || '#1d342e' }]} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.staffName, staffId === s.id && { color: s.color || '#1d342e' }]} numberOfLines={1}>
+                    {s.name}
+                  </Text>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        </Card>
+
+        <Card title={t('apptTime')}>
+          <Text style={styles.label}>
+            {t('date')} <Text style={styles.requiredMark}>*</Text>
+          </Text>
+          <Pressable 
+            style={[
+              styles.dateTimeButton,
+              !date ? styles.inputRequired : null
+            ]} 
+            onPress={() => setShowCalendar(!showCalendar)}
+          >
+            <Text style={styles.dateTimeButtonText}>{formatDate(date)}</Text>
+            <Text style={styles.dateTimeButtonArrow}>{showCalendar ? '▲' : '▼'}</Text>
+          </Pressable>
+
+          {showCalendar && (
+            <View style={styles.calendarContainer}>
+              {/* Stylish Month/Year Selectors */}
+              <View style={styles.calendarHeaderNew}>
+                {/* Month Selector */}
+                <View style={styles.dateSelectorsContainer}>
+                  <Pressable 
+                    style={styles.monthYearSelector}
+                    onPress={() => {
+                      setShowMonthDropdown(!showMonthDropdown);
+                      setShowYearDropdown(false);
+                    }}
+                  >
+                    <Text style={styles.monthYearSelectorText}>
+                      {lang === 'pl' 
+                        ? ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 
+                           'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień'][date.getMonth()]
+                        : ['January', 'February', 'March', 'April', 'May', 'June',
+                           'July', 'August', 'September', 'October', 'November', 'December'][date.getMonth()]
+                      }
+                    </Text>
+                    <Text style={styles.monthYearSelectorArrow}>{showMonthDropdown ? '▲' : '▼'}</Text>
+                  </Pressable>
+
+                  {/* Year Selector */}
+                  <Pressable 
+                    style={styles.monthYearSelector}
+                    onPress={() => {
+                      setShowYearDropdown(!showYearDropdown);
+                      setShowMonthDropdown(false);
+                    }}
+                  >
+                    <Text style={styles.monthYearSelectorText}>{date.getFullYear()}</Text>
+                    <Text style={styles.monthYearSelectorArrow}>{showYearDropdown ? '▲' : '▼'}</Text>
+                  </Pressable>
+                </View>
+
+                {/* Month Dropdown */}
+                {showMonthDropdown && (
+                  <View style={styles.dropdownContainer}>
+                    <ScrollView style={styles.dropdownScroll} showsVerticalScrollIndicator={false}>
+                      {(lang === 'pl' 
+                        ? ['Styczeń', 'Luty', 'Marzec', 'Kwiecień', 'Maj', 'Czerwiec', 
+                           'Lipiec', 'Sierpień', 'Wrzesień', 'Październik', 'Listopad', 'Grudzień']
+                        : ['January', 'February', 'March', 'April', 'May', 'June',
+                           'July', 'August', 'September', 'October', 'November', 'December']
+                      ).map((month, index) => (
+                        <Pressable
+                          key={index}
+                          style={[
+                            styles.dropdownOption,
+                            index === date.getMonth() && styles.dropdownOptionSelected
+                          ]}
+                          onPress={() => {
+                            const newDate = new Date(date);
+                            newDate.setMonth(index);
+                            setDate(newDate);
+                            setShowMonthDropdown(false);
+                          }}
+                        >
+                          <Text style={[
+                            styles.dropdownOptionText,
+                            index === date.getMonth() && styles.dropdownOptionTextSelected
+                          ]}>
+                            {month}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+
+                {/* Year Dropdown */}
+                {showYearDropdown && (
+                  <View style={styles.dropdownContainer}>
+                    <ScrollView style={styles.dropdownScroll} showsVerticalScrollIndicator={false}>
+                      {Array.from({ length: 11 }, (_, i) => new Date().getFullYear() - 5 + i).map((year) => (
+                        <Pressable
+                          key={year}
+                          style={[
+                            styles.dropdownOption,
+                            year === date.getFullYear() && styles.dropdownOptionSelected
+                          ]}
+                          onPress={() => {
+                            const newDate = new Date(date);
+                            newDate.setFullYear(year);
+                            setDate(newDate);
+                            setShowYearDropdown(false);
+                          }}
+                        >
+                          <Text style={[
+                            styles.dropdownOptionText,
+                            year === date.getFullYear() && styles.dropdownOptionTextSelected
+                          ]}>
+                            {year}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
+
+              {/* Days of Week */}
+              <View style={styles.calendarWeekDays}>
+                {(lang === 'pl' 
+                  ? ['Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'Sb', 'Nd']
+                  : ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
+                ).map((day, index) => (
+                  <Text key={index} style={styles.calendarWeekDay}>{day}</Text>
+                ))}
+              </View>
+
+              {/* Calendar Days */}
+              <View style={styles.calendarDays}>
+                {generateCalendarDays().map((day, index) => {
+                  const isCurrentMonth = day.getMonth() === date.getMonth();
+                  const isSelected = day.toDateString() === date.toDateString();
+                  const isToday = day.toDateString() === new Date().toDateString();
+                  
+                  // Get selected staff color
+                  const selectedStaff = staff.find(s => s.id === staffId);
+                  const staffColor = selectedStaff?.color || '#1d342e';
+                  
+                  return (
+                    <Pressable
+                      key={index}
+                      style={[
+                        styles.calendarDay,
+                        isSelected && {
+                          backgroundColor: staffColor,
+                          borderRadius: 8,
+                        },
+                        isToday && !isSelected && {
+                          backgroundColor: `${staffColor}20`,
+                          borderRadius: 8,
+                        }
+                      ]}
+                      onPress={() => {
+                        if (isCurrentMonth) {
+                          setDate(day);
+                          setShowCalendar(false);
+                        }
+                      }}
+                    >
+                      <Text style={[
+                        styles.calendarDayText,
+                        !isCurrentMonth && styles.calendarDayTextInactive,
+                        isSelected && styles.calendarDayTextSelected,
+                        isToday && !isSelected && { color: staffColor, fontWeight: '600' }
+                      ]}>
+                        {day.getDate()}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          )}
+
+          <Text style={[styles.label, { marginTop: 16 }]}>
+            {t('time')} <Text style={styles.requiredMark}>*</Text>
+          </Text>
+          <View style={styles.timeInputContainer}>
+            <View style={styles.timeInputBox}>
+              <Text style={styles.timeInputLabel}>
+                {lang === 'pl' ? 'Godzina' : 'Hour'}
+              </Text>
+              <TimeInput
+                ref={hourInputRef}
+                style={[
+                  !time ? styles.inputRequired : null
+                ]}
+                value={hourText}
+                onChangeText={(text) => {
+                  // Only allow numbers, max 2 digits
+                  const cleaned = text.replace(/[^0-9]/g, '').slice(0, 2);
+                  setHourText(cleaned);
+                  
+                  // Update time if it's a valid hour
+                  const hour = parseInt(cleaned);
+                  if (!isNaN(hour) && hour >= 0 && hour <= 23) {
+                    const newTime = new Date(time);
+                    newTime.setHours(hour);
+                    setTime(newTime);
+                  }
+                }}
+                onBlur={() => {
+                  // Format the input when user finishes editing
+                  const hour = parseInt(hourText) || 0;
+                  const validHour = Math.min(Math.max(hour, 0), 23);
+                  const formatted = validHour.toString().padStart(2, '0');
+                  setHourText(formatted);
+                  
+                  const newTime = new Date(time);
+                  newTime.setHours(validHour);
+                  setTime(newTime);
+                }}
+                keyboardType="number-pad"
+                maxLength={2}
+                placeholder="09"
+                placeholderTextColor="#9CA3AF"
+                selectTextOnFocus={true}
+              />
+            </View>
+            
+            <Text style={styles.timeInputSeparator}>:</Text>
+            
+            <View style={styles.timeInputBox}>
+              <Text style={styles.timeInputLabel}>
+                {lang === 'pl' ? 'Minuta' : 'Min'}
+              </Text>
+              <TimeInput
+                ref={minuteInputRef}
+                style={[
+                  !time ? styles.inputRequired : null
+                ]}
+                value={minuteText}
+                onChangeText={(text) => {
+                  // Only allow numbers, max 2 digits
+                  const cleaned = text.replace(/[^0-9]/g, '').slice(0, 2);
+                  setMinuteText(cleaned);
+                  
+                  // Update time if it's a valid minute
+                  const minute = parseInt(cleaned);
+                  if (!isNaN(minute) && minute >= 0 && minute <= 59) {
+                    const newTime = new Date(time);
+                    newTime.setMinutes(minute);
+                    setTime(newTime);
+                  }
+                }}
+                onBlur={() => {
+                  // Format the input when user finishes editing
+                  const minute = parseInt(minuteText) || 0;
+                  const validMinute = Math.min(Math.max(minute, 0), 59);
+                  const formatted = validMinute.toString().padStart(2, '0');
+                  setMinuteText(formatted);
+                  
+                  const newTime = new Date(time);
+                  newTime.setMinutes(validMinute);
+                  setTime(newTime);
+                }}
+                keyboardType="number-pad"
+                maxLength={2}
+                placeholder="00"
+                placeholderTextColor="#9CA3AF"
+                selectTextOnFocus={true}
+              />
+            </View>
+          </View>
+        </Card>
+
+        <Card title={t('notesOptional')}>
+          <Input value={title} onChangeText={setTitle} placeholder="e.g., toner preferences, allergies" multiline />
+        </Card>
+
+        <View style={{ marginTop: 16, paddingHorizontal: 32 }}>
+          <BigBtn 
+            text={initial ? t('saveChanges') : t('saveBooking')} 
+            kind="primary" 
+            onPress={handleSave} 
+          />
+        </View>
+    </KeyboardAwareScrollView>
+  );
+}
+
+function ServicesScreen({ services, reload, showAlert }) {
+  const { t, lang } = useSettings();
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newServiceName, setNewServiceName] = useState('');
+  const [newServiceHours, setNewServiceHours] = useState('1');
+  const [newServiceMinutes, setNewServiceMinutes] = useState('0');
+
+  const toLocal = (svc) => {
+    const minutes = Math.max(0, Number(svc.duration_min ?? 60));
+    const hoursPart = Math.floor(minutes / 60);
+    const minutesPart = minutes % 60;
+    return {
+      ...svc,
+      durationHours: String(hoursPart),
+      durationMinutes: String(minutesPart),
+    };
+  };
+
+  const [items, setItems] = useState(services.map(toLocal));
+  useEffect(() => setItems(services.map(toLocal)), [services]);
+
+  const updateLocal = (id, patch) =>
+    setItems((prev) =>
+      prev.map((s) => {
+        if (s.id !== id) return s;
+        const next = { ...s, ...patch };
+        if (patch.hasOwnProperty('durationHours') || patch.hasOwnProperty('durationMinutes')) {
+          const hoursText = next.durationHours ?? '';
+          const minutesText = next.durationMinutes ?? '';
+          const hoursVal = hoursText === '' ? 0 : Math.max(0, parseInt(hoursText, 10) || 0);
+          let minutesVal = minutesText === '' ? 0 : Math.max(0, parseInt(minutesText, 10) || 0);
+          minutesVal = Math.min(59, minutesVal);
+          if (minutesText !== '' && String(minutesVal) !== minutesText) {
+            next.durationMinutes = String(minutesVal);
+          }
+          next.duration_min = hoursVal * 60 + minutesVal;
+        }
+        return next;
+      })
+    );
+
+  const addService = async () => {
+    setShowAddModal(true);
+  };
+
+  const confirmAddService = async () => {
+    const name = newServiceName.trim();
+    if (!name) {
+      showAlert('Error', 'Service name is required.', 'error');
+      return;
+    }
+    const hours = Math.max(0, parseInt(newServiceHours ?? '', 10) || 0);
+    const minutes = Math.max(0, Math.min(59, parseInt(newServiceMinutes ?? '', 10) || 0));
+    const totalMinutes = hours * 60 + minutes;
+    if (totalMinutes <= 0) {
+      showAlert('Error', 'Duration must be greater than zero.', 'error');
+      return;
+    }
+
+    const { error } = await supabase.from('services').insert({ 
+      name: name, 
+      price: 0, 
+      duration_min: totalMinutes 
+    });
+    if (error) return showAlert('Error', error.message, 'error');
+    
+    // Reset form
+    setNewServiceName('');
+    setNewServiceHours('1');
+    setNewServiceMinutes('0');
+    setShowAddModal(false);
+    
+    showAlert('Success', t('serviceAdded'), 'success');
+    reload();
+  };
+
+  const cancelAddService = () => {
+    setNewServiceName('');
+    setNewServiceHours('1');
+    setNewServiceMinutes('0');
+    setShowAddModal(false);
+  };
+
+  const saveOne = async (s) => {
+    const hours = Math.max(0, parseInt(s.durationHours ?? '', 10) || 0);
+    const minutes = Math.max(0, Math.min(59, parseInt(s.durationMinutes ?? '', 10) || 0));
+    const totalMinutes = hours * 60 + minutes;
+    if (totalMinutes <= 0) {
+      showAlert('Error', 'Duration must be greater than zero.', 'error');
+      return;
+    }
+    const payload = {
+      name: (s.name ?? '').trim(),
+      duration_min: totalMinutes,
+    };
+    const { error } = await supabase.from('services').update(payload).eq('id', s.id);
+    if (error) return showAlert('Error', error.message, 'error');
+    showAlert('Success', t('saved'), 'success');
+    reload();
+  };
+
+  const remove = async (id) => {
+    const { error } = await supabase.from('services').delete().eq('id', id);
+    if (error) return showAlert('Error', error.message, 'error');
+    showAlert('Success', t('serviceRemoved'), 'success');
+    reload();
+  };
+
+  return (
+    <>
+      <KeyboardAwareScrollView>
+        <Card title={t('editServices')}>
+            {items.length === 0 ? (
+              <Text style={styles.empty}>—</Text>
+          ) : (
+            items.map((s) => (
+              <View key={s.id} style={styles.serviceBlock}>
+                <Text style={[styles.label, styles.serviceLabel]}>{t('typeOfService')}</Text>
+                <Input
+                  style={styles.serviceInput}
+                  value={s.name ?? ''}
+                  onChangeText={(txt) => updateLocal(s.id, { name: txt })}
+                  placeholder={t('typeOfService')}
+                />
+
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.label, styles.serviceLabel]}>{t('durationHours')}</Text>
+                    <Input
+                      style={styles.serviceInput}
+                      value={s.durationHours}
+                      onChangeText={(txt) => updateLocal(s.id, { durationHours: txt.replace(/[^\d]/g, '') })}
+                      keyboardType="number-pad"
+                      placeholder="1"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.label, styles.serviceLabel]}>{t('durationMinutes')}</Text>
+                    <Input
+                      style={styles.serviceInput}
+                      value={s.durationMinutes}
+                      onChangeText={(txt) => updateLocal(s.id, { durationMinutes: txt.replace(/[^\d]/g, '') })}
+                      keyboardType="number-pad"
+                      placeholder="30"
+                    />
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'flex-end' }}>
+                  <BigBtn text={t('save')} onPress={() => saveOne(s)} />
+                  <BigBtn text="✕" kind="danger" onPress={() => remove(s.id)} />
+                </View>
+
+                <View style={styles.divider} />
+              </View>
+            ))
+          )}
+
+          <View style={{ marginTop: 8 }}>
+            <BigBtn kind="primary" text={t('addService')} onPress={addService} />
+          </View>
+        </Card>
+
+        <View style={{ height: 24 }} />
+    </KeyboardAwareScrollView>
+
+      <Modal visible={showAddModal} transparent animationType="slide">
+        <Pressable style={styles.modalOverlay} onPress={cancelAddService}>
+          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>{t('addService')}</Text>
+            
+            <Text style={[styles.label, styles.serviceLabel]}>Type of service</Text>
+            <Input
+              style={styles.serviceInput}
+              value={newServiceName}
+              onChangeText={setNewServiceName}
+              placeholder="Enter service name"
+            />
+
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.label, styles.serviceLabel]}>{t('durationHours')}</Text>
+                <Input
+                  style={styles.serviceInput}
+                  value={newServiceHours}
+                  onChangeText={(txt) => setNewServiceHours(txt.replace(/[^\d]/g, ''))}
+                  keyboardType="number-pad"
+                  placeholder="1"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.label, styles.serviceLabel]}>{t('durationMinutes')}</Text>
+                <Input
+                  style={styles.serviceInput}
+                  value={newServiceMinutes}
+                  onChangeText={(txt) => {
+                    const num = parseInt(txt.replace(/[^\d]/g, ''), 10) || 0;
+                    setNewServiceMinutes(String(Math.min(59, num)));
+                  }}
+                  keyboardType="number-pad"
+                  placeholder="0"
+                />
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+              <BigBtn text={t('save')} onPress={confirmAddService} />
+              <BigBtn text="✕" kind="danger" onPress={cancelAddService} />
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </>
+  );
+}
+
 /* ============== Admin (power tools) ============== */
+function AdminScreen({ reloadAll, onPreviewRole, currentEmail, showAlert }) {
+  const { t } = useSettings();
+  const [profiles, setProfiles] = useState([]);
+  const [q, setQ] = useState('');
+  const [modal, setModal] = useState({ open: false, title: '', items: [] });
+  const [addOpen, setAddOpen] = useState(false);
+  const [addForm, setAddForm] = useState({ full_name: '', email: '', phone: '', role: 'staff' });
+
+  const load = async () => {
+    // Attempt with email; if schema doesn't have it, retry without.
+    let data, error;
+    ({ data, error } = await supabase
+      .from('profiles')
+      .select('user_id, full_name, role, phone, email')
+      .order('full_name', { ascending: true }));
+
+    if (error?.code === '42703') {
+      const retry = await supabase
+        .from('profiles')
+        .select('user_id, full_name, role, phone') // no email
+        .order('full_name', { ascending: true });
+      data = retry.data;
+    } else if (error) {
+      Alert.alert('Error', error.message);
+      return;
+    }
+    setProfiles(data || []);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const setRole = async (user_id, nextRole) => {
+    const { error } = await supabase.from('profiles').update({ role: nextRole }).eq('user_id', user_id);
+    if (error) return showAlert('Error', error.message, 'error');
+    load();
+  };
+
+  const saveRow = async (p) => {
+ const patch = {
+  full_name: (p.full_name || '').trim(),
+  phone: (p.phone || '').trim() || null,
+  ...(p.email !== undefined ? { email: (p.email || '').trim() || null } : {}),
+  role: p.role || 'staff',
+};
+
+    const { error } = await supabase.from('profiles').update(patch).eq('user_id', p.user_id);
+    if (error?.code === '42703') {
+      const { error: e2 } = await supabase.from('profiles').update({ full_name: patch.full_name, phone: patch.phone }).eq('user_id', p.user_id);
+      if (e2) return showAlert('Error', e2.message, 'error');
+    } else if (error) {
+      return showAlert('Error', error.message, 'error');
+    }
+    showAlert('Success', 'Profile updated successfully', 'success');
+    load();
+  };
+
+  const deleteProfileRow = async (user_id) => {
+    showAlert(
+      t('delete'), 
+      t('deleteProfile') + '?', 
+      'confirm', 
+      [
+        { text: t('cancel'), style: 'cancel' },
+        {
+          text: t('delete'),
+          style: 'destructive',
+          onPress: async () => {
+            const { error } = await supabase.from('profiles').delete().eq('user_id', user_id);
+            if (error) return showAlert('Error', error.message, 'error');
+            load();
+          },
+        },
+      ]
+    );
+  };
+
+  const sendReset = async (email) => {
+    if (!email) return Alert.alert('Error', 'No email for this user.');
+    const redirectTo = makeLink('/password-reset');
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
+    if (error) return Alert.alert('Failed', error.message);
+    Alert.alert('OK', 'Reset email sent');
+  };
+
+  const fetchBookingsForUser = async (p) => {
+    const tryCreatedBy = async () =>
+      supabase.from('bookings').select('*').eq('created_by', p.user_id).order('start_at', { ascending: false });
+
+    const tryClientEmail = async () =>
+      p.email
+        ? supabase.from('bookings').select('*').eq('client_email', p.email).order('start_at', { ascending: false })
+        : { data: [], error: null };
+
+    const tryClientName = async () =>
+      p.full_name
+        ? supabase.from('bookings').select('*').ilike('client_name', `%${p.full_name}%`).order('start_at', { ascending: false })
+        : { data: [], error: null };
+
+    let res = await tryCreatedBy();
+    if (res.error?.code === '42703') res = { data: [], error: null };
+    if ((res.data || []).length === 0) {
+      const res2 = await tryClientEmail();
+      if ((res2.data || []).length) res = res2;
+      else {
+        const res3 = await tryClientName();
+        if ((res3.data || []).length) res = res3;
+      }
+    }
+
+    if (res.error) return Alert.alert('Error', res.error.message);
+    const items = (res.data || []).map((b) => ({
+      id: b.id,
+      when: `${dateLabel(new Date(b.start_at))} ${timeLabel(new Date(b.start_at))}`,
+      client: b.client_name,
+      email: b.client_email,
+      phone: b.client_phone,
+      note: b.note,
+      duration_min: b.duration_min,
+    }));
+
+    setModal({
+      open: true,
+      title: `${t('viewBookings')} — ${p.full_name || p.email || p.user_id}`,
+      items,
+    });
+  };
+
+  const toCSV = (rows) => {
+    if (!rows?.length) return '';
+    const headers = Object.keys(rows[0]);
+    const escape = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    return [headers.join(','), ...rows.map((r) => headers.map((h) => escape(r[h])).join(','))].join('\n');
+  };
+
+  const exportAllBookings = async () => {
+    const { data, error } = await supabase.from('bookings').select('*').order('start_at', { ascending: true });
+    if (error) return Alert.alert('Error', error.message);
+    const rows = (data || []).map((b) => ({
+      id: b.id,
+      start_at: b.start_at,
+      client_name: b.client_name,
+      client_phone: b.client_phone,
+      client_email: b.client_email,
+      duration_min: b.duration_min,
+      note: b.note,
+    }));
+    const csv = toCSV(rows);
+    if (!csv) return Alert.alert('Info', t('noBookings'));
+    await Share.share({ message: csv });
+  };
+
+  const exportUserBookings = async (p) => {
+    const { data: all } = await supabase.from('bookings').select('*').order('start_at', { ascending: true });
+    const rows = (all || []).filter((b) =>
+      (b.created_by && b.created_by === p.user_id) ||
+      (p.email && b.client_email === p.email) ||
+      (p.full_name && (b.client_name || '').toLowerCase().includes((p.full_name || '').toLowerCase()))
+    ).map((b) => ({
+      id: b.id,
+      start_at: b.start_at,
+      client_name: b.client_name,
+      client_phone: b.client_phone,
+      client_email: b.client_email,
+      duration_min: b.duration_min,
+      note: b.note,
+    }));
+    const csv = toCSV(rows);
+    if (!csv) return Alert.alert('Info', t('noBookings'));
+    await Share.share({ message: csv });
+  };
+
+  const previewAsUser = (p) => {
+    const label = p.full_name || p.email || p.user_id.slice(0, 8);
+    onPreviewRole?.({ role: p.role || 'staff', label });
+    Alert.alert('Preview', `Now previewing as ${label}`);
+  };
+
+  // Add user
+  const createTempPassword = () =>
+    Math.random().toString(36).slice(-8) + 'A!' + Math.random().toString(36).slice(-4);
+
+  const addUser = async () => {
+    const full_name = (addForm.full_name || '').trim();
+    const email = (addForm.email || '').trim();
+    const phone = (addForm.phone || '').trim() || null;
+    const role = addForm.role || 'staff';
+    if (!email || !email.includes('@')) return Alert.alert('Error', 'Enter a valid email.');
+    const tempPass = createTempPassword();
+    const redirectTo = makeLink('/auth-callback');
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password: tempPass,
+      options: { emailRedirectTo: redirectTo },
+    });
+    if (error) return Alert.alert('Error', error.message);
+
+    const uid = data?.user?.id;
+    if (uid) {
+      const patch = { user_id: uid, full_name, phone, role };
+      // try upserting with email; if schema lacks it, fall back without
+      let up = await supabase.from('profiles').upsert({ ...patch, email });
+      if (up.error?.code === '42703') up = await supabase.from('profiles').upsert(patch);
+      if (up.error) return Alert.alert('Error', up.error.message);
+    }
+
+    setAddOpen(false);
+    setAddForm({ full_name: '', email: '', phone: '', role: 'staff' });
+    Alert.alert('User created', 'A confirmation email has been sent.');
+    load();
+  };
+
+  const filtered = profiles.filter((p) => {
+    const hay = `${p.full_name || ''} ${p.email || ''} ${p.role || ''}`.toLowerCase();
+    return hay.includes(q.trim().toLowerCase());
+  });
+
+  return (
+    <>
+      <KeyboardAwareScrollView>
+          <Card title={t('users')}>
+            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+              <Input placeholder={t('searchUsers')} value={q} onChangeText={setQ} style={{ flex: 1 }} />
+              <BigBtn text={t('addUser')} onPress={() => setAddOpen(true)} />
+            </View>
+
+            {filtered.length === 0 ? (
+              <Text style={styles.empty}>—</Text>
+            ) : (
+              filtered.map((p) => (
+                <View key={p.user_id} style={styles.adminRow}>
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text style={{ fontSize: 12, color: '#6B7280', marginBottom: 4 }}>{p.user_id}</Text>
+
+                    <Text style={styles.label}>{t('name')}</Text>
+                    <Input
+                      value={p.full_name || ''}
+                      onChangeText={(txt) =>
+                        setProfiles((prev) => prev.map((x) => (x.user_id === p.user_id ? { ...x, full_name: txt } : x)))
+                      }
+                      placeholder="Full name"
+                    />
+
+                    {p.email !== undefined && (
+                      <>
+                        <Text style={styles.label}>{t('emailProfiles')}</Text>
+                        <Input
+                          autoCapitalize="none"
+                          keyboardType="email-address"
+                          value={p.email || ''}
+                          onChangeText={(txt) =>
+                            setProfiles((prev) => prev.map((x) => (x.user_id === p.user_id ? { ...x, email: txt } : x)))
+                          }
+                          placeholder="user@example.com"
+                        />
+                      </>
+                    )}
+
+                    <Text style={styles.label}>{t('phoneProfiles')}</Text>
+                    <Input
+                      keyboardType="phone-pad"
+                      value={p.phone || ''}
+                      onChangeText={(txt) =>
+                        setProfiles((prev) => prev.map((x) => (x.user_id === p.user_id ? { ...x, phone: txt } : x)))
+                      }
+                      placeholder="+48 ..."
+                    />
+
+<Text style={styles.label}>{t('role')}</Text>
+<View style={styles.pickerWrapTight}>
+  <Picker
+    selectedValue={p.role || 'staff'}
+    onValueChange={(val) =>
+      setProfiles((prev) =>
+        prev.map((x) => (x.user_id === p.user_id ? { ...x, role: val } : x))
+      )
+    }
+    style={styles.yearPickerResponsive}
+  >
+    <Picker.Item label="staff" value="staff" />
+    <Picker.Item label="admin" value="admin" />
+    <Picker.Item label="disabled" value="disabled" />
+  </Picker>
+</View>
+
+                  </View>
+
+                  <View style={{ gap: 6, width: 208 }}>
+                    <BigBtn text={t('save')} onPress={() => saveRow(p)} />
+                    <BigBtn
+                      text={p.role === 'admin' ? t('makeStaff') : t('makeAdmin')}
+                      onPress={() => setRole(p.user_id, p.role === 'admin' ? 'staff' : 'admin')}
+                    />
+                    <BigBtn
+                      text={p.role === 'disabled' ? t('enable') : t('disable')}
+                      kind={p.role === 'disabled' ? 'default' : 'danger'}
+                      onPress={() => setRole(p.user_id, p.role === 'disabled' ? 'staff' : 'disabled')}
+                    />
+                    <BigBtn text={t('viewBookings')} onPress={() => fetchBookingsForUser(p)} />
+                    <BigBtn text={t('exportUser')} onPress={() => exportUserBookings(p)} />
+                    {p.email !== undefined && <BigBtn text={t('sendReset')} onPress={() => sendReset(p.email)} />}
+                    <BigBtn text={t('deleteProfile')} kind="danger" onPress={() => deleteProfileRow(p.user_id)} />
+                    <BigBtn text={t('previewAs')} onPress={() => previewAsUser(p)} />
+                  </View>
+                </View>
+              ))
+            )}
+          </Card>
+
+          <View style={{ height: 12 }} />
+          <View style={{ paddingHorizontal: 32 }}>
+            <BigBtn text={t('exportAll')} onPress={exportAllBookings} />
+          </View>
+          <View style={{ height: 24 }} />
+      </KeyboardAwareScrollView>
+
+      {/* Bookings list modal */}
+      <Modal
+        visible={modal.open}
+        transparent
+        onRequestClose={() => setModal((m) => ({ ...m, open: false }))}
+        animationType="fade"
+      >
+        <View style={styles.modalBack}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{modal.title}</Text>
+            <ScrollView style={{ maxHeight: 360 }}>
+              {modal.items.length === 0 ? (
+                <Text style={styles.empty}>—</Text>
+              ) : (
+                modal.items.map((it) => (
+                  <View key={it.id} style={{ paddingVertical: 8, borderBottomWidth: 1, borderColor: '#EEE' }}>
+                    <Text style={{ fontWeight: '800' }}>{it.when}</Text>
+                    <Text>{it.client}</Text>
+                    <Text style={{ color: '#6B7280' }}>{it.email || ''}</Text>
+                    <Text style={{ color: '#6B7280' }}>{it.phone || ''}</Text>
+                    <Text style={{ color: '#6B7280' }}>{it.note || ''}</Text>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+            <View style={{ marginTop: 10, alignItems: 'flex-end' }}>
+              <BigBtn text={t('close')} onPress={() => setModal((m) => ({ ...m, open: false }))} />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Add user modal */}
+      <Modal visible={addOpen} transparent animationType="fade" onRequestClose={() => setAddOpen(false)}>
+        <Pressable style={styles.modalBack} onPress={() => setAddOpen(false)}>
+          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>{t('addUser')}</Text>
+            <Text style={styles.label}>{t('name')}</Text>
+            <Input value={addForm.full_name} onChangeText={(v) => setAddForm((f) => ({ ...f, full_name: v }))} placeholder="Jane Doe" />
+            <Text style={styles.label}>Email</Text>
+            <Input value={addForm.email} autoCapitalize="none" keyboardType="email-address" onChangeText={(v) => setAddForm((f) => ({ ...f, email: v }))} placeholder="user@example.com" />
+            <Text style={styles.label}>{t('phoneProfiles')}</Text>
+            <Input value={addForm.phone} keyboardType="phone-pad" onChangeText={(v) => setAddForm((f) => ({ ...f, phone: v }))} placeholder="+48 ..." />
+            <Text style={styles.label}>{t('role')}</Text>
+            <View style={styles.pickerWrap}>
+              <Picker selectedValue={addForm.role} onValueChange={(v) => setAddForm((f) => ({ ...f, role: v }))} style={styles.pickerBig}>
+                <Picker.Item label="staff" value="staff" />
+                <Picker.Item label="admin" value="admin" />
+                <Picker.Item label="disabled" value="disabled" />
+              </Picker>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }}>
+              <BigBtn text={t('cancel')} onPress={() => setAddOpen(false)} />
+              <BigBtn text={t('addUser')} kind="primary" onPress={addUser} />
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </>
+  );
+}
+
+
 /* ============================== Complete Calendar Implementation ============================== */
 
 // Helper function for Monday-based weeks
@@ -415,30 +2479,17 @@ function startOfWeekMonday(d) {
   return x;
 }
 
-const SHOW_SCHEDULE_VIEW = false;
-const SHOW_WEEK_NAV = true;
-
 // Main Calendar Screen with dropdown menu
-function CalendarScreen({
-  bookings,
-  services,
-  staff,
-  weekStart,
-  setWeekStart,
-  onPressBooking,
-  onCreateBooking,
-  onOpenSettings,
-}) {
+function CalendarScreen({ bookings, services, staff, weekStart, setWeekStart, onPressBooking, onCreateBooking }) {
   const { t, lang } = useSettings();
   
   // View mode state - Daily is now default
   const [viewMode, setViewMode] = useState('daily'); // 'daily', 'weekly', 'monthly'
   const [showViewMenu, setShowViewMenu] = useState(false);
-
-const [selectedDate, setSelectedDate] = useState(() => new Date());
-const [currentTime, setCurrentTime] = useState(new Date());
-const [monthlyViewDate, setMonthlyViewDate] = useState(() => new Date());
-const prevViewModeRef = useRef('daily');
+  
+const today = new Date();
+const initialWeek = weekStart ? new Date(weekStart) : startOfWeekMonday(new Date());
+const [selectedDate, setSelectedDate] = useState(weekStart ? initialWeek : today);
 
 useEffect(() => {
     if (!weekStart) return;
@@ -447,45 +2498,9 @@ useEffect(() => {
     const incomingWeek = startOfWeekMonday(incoming);
     const currentWeek = startOfWeekMonday(selectedDate);
     if (incomingWeek.getTime() !== currentWeek.getTime()) {
-      setSelectedDate((prev) => {
-        const base = startOfWeekMonday(incomingWeek);
-        if (!(prev instanceof Date)) return base;
-        const dayOffset = (prev.getDay() + 6) % 7; // Monday -> 0, Sunday -> 6
-        const next = new Date(base);
-        next.setDate(next.getDate() + dayOffset);
-        return next;
-      });
+      setSelectedDate(incomingWeek);
     }
-  }, [weekStart, selectedDate]);
-
-  useEffect(() => {
-    if (!SHOW_SCHEDULE_VIEW && viewMode === 'weekly') {
-      setViewMode('daily');
-    }
-  }, [viewMode]);
-
-  useEffect(() => {
-    if (viewMode === 'monthly' && prevViewModeRef.current !== 'monthly') {
-      setMonthlyViewDate(selectedDate);
-    }
-    prevViewModeRef.current = viewMode;
-  }, [viewMode, selectedDate]);
-
-  useEffect(() => {
-    if (!SHOW_SCHEDULE_VIEW && viewMode === 'weekly') {
-      setViewMode('daily');
-    }
-  }, [viewMode]);
-
-  // Add this entire useEffect block:
-  useEffect(() => {
-    // Update current time every minute to move the red line
-    const interval = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 10000); // Update every 60 seconds
-
-    return () => clearInterval(interval);
-  }, []);
+  }, [weekStart]);
 
   const startOfSelectedWeek = useMemo(() => startOfWeekMonday(selectedDate), [selectedDate]);
 
@@ -498,9 +2513,9 @@ useEffect(() => {
     }
     return days;
   }, [startOfSelectedWeek]);
+
   const bookingsForDay = useMemo(() => {
     return bookings
-      .filter((bk) => !bk.status || bk.status === 'active' || bk.status === 'scheduled')
       .filter((bk) => {
         const start = new Date(bk.start_at);
         return start.toDateString() === selectedDate.toDateString();
@@ -526,15 +2541,6 @@ useEffect(() => {
     setSelectedDate(nextSelected);
   };
 
-  
-  const shiftMonth = (delta) => {
-    const newDate = new Date(selectedDate);
-    newDate.setMonth(newDate.getMonth() + delta);
-    setSelectedDate(newDate);
-    const newMonday = startOfWeekMonday(newDate);
-    setWeekStart(newMonday);
-  };
-
   const handleCreateBooking = () => {
     const candidate = new Date(selectedDate);
     candidate.setHours(9, 0, 0, 0);
@@ -542,7 +2548,7 @@ useEffect(() => {
   };
 
   const weekdayShort = lang === 'pl' 
-    ? ['PN', 'WT', 'SR', 'CZ', 'PT', 'SB', 'ND']
+    ? ['PN', 'WT', 'ŚR', 'CZ', 'PT', 'SB', 'ND']
     : ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
   
   const dayHeadline = selectedDate.toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US', { month: 'long', day: 'numeric' });
@@ -556,279 +2562,60 @@ useEffect(() => {
     return `${hours}.${minutes.toString().padStart(2, '0')}`;
   };
 
-  const TIMELINE_START_HOUR = 8;
-  const TIMELINE_END_HOUR = 20;
-  const HOUR_BLOCK_HEIGHT = 92;
-  const HALF_HOUR_HEIGHT = HOUR_BLOCK_HEIGHT / 2;
-  const MIN_CARD_HEIGHT = 96;
-  const OVERLAP_CARD_SPACING = 18;
-  const timelineHours = useMemo(
-    () => Array.from({ length: TIMELINE_END_HOUR - TIMELINE_START_HOUR + 1 }, (_, idx) => TIMELINE_START_HOUR + idx),
-    []
-  );
-
-  const timelineStart = useMemo(() => {
-    const base = new Date(selectedDate);
-    base.setHours(TIMELINE_START_HOUR, 0, 0, 0);
-    return base;
-  }, [selectedDate]);
-
-  const timelineTotalMinutes = (TIMELINE_END_HOUR - TIMELINE_START_HOUR) * 60;
-  const timelineHeight = timelineTotalMinutes / 60 * HOUR_BLOCK_HEIGHT;
-
-  const positionedBookings = useMemo(() => {
-    const baseEntries = bookingsForDay.map((booking) => {
-      const start = new Date(booking.start_at);
-      const duration = Math.max(booking.duration_min || 60, 30);
-      const minutesFromStart = (start.getTime() - timelineStart.getTime()) / 60000;
-      const rawEnd = minutesFromStart + duration;
-      const clampedStart = Math.max(0, minutesFromStart);
-      const clampedEnd = Math.min(timelineTotalMinutes, rawEnd);
-      const visibleDuration = Math.max(30, clampedEnd - clampedStart);
-      const top = (clampedStart / 60) * HOUR_BLOCK_HEIGHT;
-      const height = Math.max(MIN_CARD_HEIGHT, (visibleDuration / 60) * HOUR_BLOCK_HEIGHT - 8);
-      const staffMember = staff.find((s) => s.id === booking.staff_id);
-      const service = services.find((s) => s.id === booking.service_id);
-
-      return {
-        booking,
-        top,
-        height,
-        start,
-        duration,
-        staffMember,
-        service,
-        color: staffMember?.color || '#1d342e',
-        startMinutes: clampedStart,
-        endMinutes: clampedEnd,
-        laneIndex: 0,
-        laneCount: 1,
-      };
-    });
-
-    if (baseEntries.length === 0) return [];
-
-    const entriesByStaff = new Map();
-    baseEntries.forEach((entry) => {
-      const key = entry.booking.staff_id || 'unknown';
-      if (!entriesByStaff.has(key)) entriesByStaff.set(key, []);
-      entriesByStaff.get(key).push(entry);
-    });
-
-    const positioned = [];
-
-    const flushGroup = (group) => {
-      if (!group.length) return;
-      const laneEnds = [];
-      const active = [];
-
-      group.forEach((item) => {
-        for (let i = active.length - 1; i >= 0; i -= 1) {
-          if (active[i].endMinutes <= item.startMinutes) {
-            active.splice(i, 1);
-          }
-        }
-
-        let laneIdx = laneEnds.findIndex((end) => item.startMinutes >= end);
-        if (laneIdx === -1) {
-          laneIdx = laneEnds.length;
-          laneEnds.push(item.endMinutes);
-        } else {
-          laneEnds[laneIdx] = item.endMinutes;
-        }
-
-        item.laneIndex = laneIdx;
-        item.laneCount = Math.max(item.laneCount, laneEnds.length);
-        active.forEach((activeItem) => {
-          activeItem.laneCount = Math.max(activeItem.laneCount, laneEnds.length);
-        });
-        active.push(item);
-      });
-
-      positioned.push(...group);
-    };
-
-    entriesByStaff.forEach((entries) => {
-      const sorted = [...entries].sort((a, b) => {
-        if (a.startMinutes === b.startMinutes) return a.endMinutes - b.endMinutes;
-        return a.startMinutes - b.startMinutes;
-      });
-
-      let group = [];
-      let groupEnd = -Infinity;
-
-      sorted.forEach((item) => {
-        if (!group.length || item.startMinutes < groupEnd) {
-          group.push(item);
-          groupEnd = Math.max(groupEnd, item.endMinutes);
-        } else {
-          flushGroup(group);
-          group = [item];
-          groupEnd = item.endMinutes;
-        }
-      });
-
-      flushGroup(group);
-    });
-
-    return positioned
-      .sort((a, b) => {
-        if (a.startMinutes === b.startMinutes) return a.laneIndex - b.laneIndex;
-        return a.startMinutes - b.startMinutes;
-      })
-      .map((entry) => entry);
-  }, [bookingsForDay, staff, services, timelineStart, timelineTotalMinutes]);
-
-const currentIndicatorTop = useMemo(() => {
-  if (selectedDate.toDateString() === currentTime.toDateString()) {
-    const minutesFromStart = (currentTime.getTime() - timelineStart.getTime()) / 60000;
-    if (minutesFromStart >= 0 && minutesFromStart <= timelineTotalMinutes) {
-      return (minutesFromStart / 60) * HOUR_BLOCK_HEIGHT;
-    }
-  }
-  return null;
-}, [selectedDate, currentTime, timelineStart, timelineTotalMinutes]);
-
-  const formatRange = (start, durationMinutes) => {
-    const end = new Date(start.getTime() + durationMinutes * 60000);
-    return `${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-  };
-
   return (
     <View style={styles.calendarWrapper}>
-      <View style={styles.calendarHeaderMinimal}>
-        <TouchableOpacity
-          style={styles.calendarHeaderIconButton}
-          onPress={() => {}}
-          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+      {/* View Mode Dropdown */}
+      <View style={styles.calendarViewSwitcher}>
+        <Pressable 
+          style={styles.viewSwitcherButton}
+          onPress={() => setShowViewMenu(!showViewMenu)}
         >
-          <Ionicons name="notifications-outline" size={22} color="#1d342e" />
-        </TouchableOpacity>
-
-        <View style={styles.calendarHeaderCenterWrapper}>
-          <Pressable
-            style={styles.calendarHeaderCenterBlock}
-            onPress={() => setShowViewMenu(prev => !prev)}
-          >
-            <Text style={styles.calendarHeaderDayText}>
-              {selectedDate.toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US', {
-                weekday: 'short',
-                day: 'numeric',
-                month: 'long',
-              })}
-            </Text>
-            <View style={styles.calendarHeaderTimeRow}>
-              <Text style={styles.calendarHeaderTimeText}>09:00 - 20:00</Text>
-              <Ionicons name={showViewMenu ? 'chevron-up' : 'chevron-down'} size={14} color="#1d342e" />
-            </View>
-          </Pressable>
-
-          {showViewMenu && (
-            <View style={styles.calendarCleanDropdown}>
-              <Pressable 
-                style={[styles.calendarCleanOption, viewMode === 'daily' && styles.calendarCleanOptionActive]}
-                onPress={() => { 
-                  setViewMode('daily'); 
-                  setShowViewMenu(false); 
-                  const today = new Date();
-                  setSelectedDate(today);
-                  setWeekStart(startOfWeekMonday(today));
-                }}
-              >
-                <Ionicons name="today" size={20} color={viewMode === 'daily' ? '#c7a864' : '#7b8277'} />
-                <Text style={[styles.calendarCleanOptionText, viewMode === 'daily' && styles.calendarCleanOptionTextActive]}>
-                  Daily
-                </Text>
-              </Pressable>
-
-              {SHOW_SCHEDULE_VIEW && (
-                <Pressable 
-                  style={[styles.calendarCleanOption, viewMode === 'weekly' && styles.calendarCleanOptionActive]}
-                  onPress={() => { setViewMode('weekly'); setShowViewMenu(false); }}
-                >
-                  <Ionicons name="calendar" size={20} color={viewMode === 'weekly' ? '#c7a864' : '#7b8277'} />
-                  <Text style={[styles.calendarCleanOptionText, viewMode === 'weekly' && styles.calendarCleanOptionTextActive]}>
-                    Schedule
-                  </Text>
-                </Pressable>
-              )}
-
-              <Pressable 
-                style={[styles.calendarCleanOption, viewMode === 'monthly' && styles.calendarCleanOptionActive]}
-                onPress={() => { 
-                  setViewMode('monthly'); 
-                  setShowViewMenu(false); 
-                  setMonthlyViewDate(selectedDate);
-                }}
-              >
-                <Ionicons name="calendar-outline" size={20} color={viewMode === 'monthly' ? '#c7a864' : '#7b8277'} />
-                <Text style={[styles.calendarCleanOptionText, viewMode === 'monthly' && styles.calendarCleanOptionTextActive]}>
-                  Monthly
-                </Text>
-              </Pressable>
-            </View>
-          )}
-        </View>
-
-        <View style={styles.calendarHeaderEndActions}>
-          <TouchableOpacity
-            style={styles.calendarHeaderIconButton}
-            onPress={() => {}}
-            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-          >
-            <Ionicons name="funnel-outline" size={22} color="#1d342e" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.calendarHeaderIconButton}
-            onPress={onOpenSettings}
-            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-          >
-            <Ionicons name="ellipsis-vertical" size={22} color="#1d342e" />
-          </TouchableOpacity>
-        </View>
-      </View>
-      {/* Month navigation header - only show in monthly view */}
-{/* Month navigation header - only show in monthly view */}
-{/* Month navigation header - only show in monthly view */}
-      {viewMode === 'monthly' && (
-        <View style={styles.monthNavigationHeader}>
-          <TouchableOpacity
-            onPress={() => {
-              const newDate = new Date(monthlyViewDate);
-              newDate.setMonth(newDate.getMonth() - 1);
-              setMonthlyViewDate(newDate);
-            }}
-            style={styles.monthNavButton}
-          >
-            <Ionicons name="chevron-back" size={24} color="#1d342e" />
-          </TouchableOpacity>
-          
-          <Text style={styles.monthYearText}>
-            {monthlyViewDate.toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US', { 
-              month: 'long', 
-              year: 'numeric' 
-            })}
+          <Ionicons name="menu" size={20} color="#1d342e" />
+          <Text style={styles.viewSwitcherText}>
+            {viewMode === 'daily' ? t('daily') : 
+             viewMode === 'weekly' ? (lang === 'pl' ? 'Tygodniowy' : 'Weekly') : 
+             t('monthly')}
           </Text>
-          
-          <TouchableOpacity
-            onPress={() => {
-              const newDate = new Date(monthlyViewDate);
-              newDate.setMonth(newDate.getMonth() + 1);
-              setMonthlyViewDate(newDate);
-            }}
-            style={styles.monthNavButton}
-          >
-            <Ionicons name="chevron-forward" size={24} color="#1d342e" />
-          </TouchableOpacity>
-        </View>
-      )}
+          <Ionicons name={showViewMenu ? "chevron-up" : "chevron-down"} size={16} color="#666" />
+        </Pressable>
 
-      {SHOW_WEEK_NAV ? (
-        <WeekNavigator selectedDate={selectedDate} onDateSelect={handleDayPress} t={t} />
-      ) : null}
+        {showViewMenu && (
+          <View style={styles.viewSwitcherDropdown}>
+            <Pressable 
+              style={[styles.viewSwitcherOption, viewMode === 'daily' && styles.viewSwitcherOptionActive]}
+              onPress={() => { setViewMode('daily'); setShowViewMenu(false); }}
+            >
+              <Ionicons name="today" size={18} color={viewMode === 'daily' ? '#c7a864' : '#666'} />
+              <Text style={[styles.viewSwitcherOptionText, viewMode === 'daily' && styles.viewSwitcherOptionTextActive]}>
+                {t('daily')}
+              </Text>
+            </Pressable>
+
+            <Pressable 
+              style={[styles.viewSwitcherOption, viewMode === 'weekly' && styles.viewSwitcherOptionActive]}
+              onPress={() => { setViewMode('weekly'); setShowViewMenu(false); }}
+            >
+              <Ionicons name="calendar" size={18} color={viewMode === 'weekly' ? '#c7a864' : '#666'} />
+              <Text style={[styles.viewSwitcherOptionText, viewMode === 'weekly' && styles.viewSwitcherOptionTextActive]}>
+                {lang === 'pl' ? 'Tygodniowy' : 'Weekly'}
+              </Text>
+            </Pressable>
+
+            <Pressable 
+              style={[styles.viewSwitcherOption, viewMode === 'monthly' && styles.viewSwitcherOptionActive]}
+              onPress={() => { setViewMode('monthly'); setShowViewMenu(false); }}
+            >
+              <Ionicons name="calendar-outline" size={18} color={viewMode === 'monthly' ? '#c7a864' : '#666'} />
+              <Text style={[styles.viewSwitcherOptionText, viewMode === 'monthly' && styles.viewSwitcherOptionTextActive]}>
+                {t('monthly')}
+              </Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
 
       {/* Render based on view mode */}
-      {SHOW_SCHEDULE_VIEW && viewMode === 'weekly' && (
+      {viewMode === 'weekly' && (
         <>
           <TouchableOpacity
             onPress={() => shiftWeek(-1)}
@@ -837,52 +2624,32 @@ const currentIndicatorTop = useMemo(() => {
           
           <View style={styles.calendarWeekHeaderClean}>
             <View style={styles.calendarDayStripClean}>
-              {(() => {
-                const todayString = new Date().toDateString();
-                return weekDays.map((day, idx) => {
-                  const isActive = day.toDateString() === selectedDate.toDateString();
-                  const isToday = day.toDateString() === todayString;
-                  const dayIndex = (day.getDay() + 6) % 7;
-                  return (
+              {weekDays.map((day, idx) => {
+                const isActive = day.toDateString() === selectedDate.toDateString();
+                const dayIndex = (day.getDay() + 6) % 7;
+                return (
                   <Pressable
                     key={day.toISOString()}
                     onPress={() => handleDayPress(day)}
-                    style={[
-                      styles.calendarDayItemClean,
-                      isToday && styles.calendarDayItemTodayClean,
-                      isActive && styles.calendarDayItemActiveClean
-                    ]}
+                    style={styles.calendarDayItemClean}
                   >
-                      <Text
-                        style={[
-                          styles.calendarDayLabelClean,
-                          isToday && styles.calendarDayLabelTodayClean,
-                          isActive && styles.calendarDayLabelActiveClean
-                        ]}
-                      >
-                        {weekdayShort[dayIndex]}
+                    <Text style={styles.calendarDayLabelClean}>
+                      {weekdayShort[dayIndex]}
+                    </Text>
+                    <View style={[
+                      styles.calendarDayCircleClean,
+                      isActive && styles.calendarDayCircleActiveClean
+                    ]}>
+                      <Text style={[
+                        styles.calendarDayNumberClean,
+                        isActive && styles.calendarDayNumberActiveClean
+                      ]}>
+                        {day.getDate()}
                       </Text>
-                      <View
-                        style={[
-                          styles.calendarDayCircleClean,
-                          isToday && styles.calendarDayCircleTodayClean,
-                          isActive && styles.calendarDayCircleActiveClean
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.calendarDayNumberClean,
-                            isToday && styles.calendarDayNumberTodayClean,
-                            isActive && styles.calendarDayNumberActiveClean
-                          ]}
-                        >
-                          {day.getDate()}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  );
-                });
-              })()}
+                    </View>
+                  </Pressable>
+                );
+              })}
             </View>
           </View>
 
@@ -892,6 +2659,10 @@ const currentIndicatorTop = useMemo(() => {
           />
 
           <ScrollView contentContainerStyle={styles.calendarListContentMockup} showsVerticalScrollIndicator={false}>
+            <View style={styles.calendarDateHeaderMockup}>
+              <Text style={styles.calendarDateHeaderTextMockup}>{dayHeadline}</Text>
+            </View>
+
             {bookingsForDay.length === 0 ? (
               <View style={styles.calendarEmptyState}>
                 <Ionicons name="calendar-outline" size={22} color="#8a9a92" />
@@ -916,6 +2687,7 @@ const currentIndicatorTop = useMemo(() => {
                       <Ionicons name="time-outline" size={16} color="#888" style={{ marginTop: 2 }} />
                     </View>
                     <View style={styles.scheduleCardBodyMockup}>
+                      <Text style={styles.scheduleCardNameMockup}>{booking.client_name || t('client')}</Text>
                       <Text style={styles.scheduleCardServiceMockup}>{service?.name || t('service')}</Text>
                     </View>
                   </Pressable>
@@ -926,10 +2698,11 @@ const currentIndicatorTop = useMemo(() => {
         </>
       )}
 
-      {/* Daily view with modern timeline */}
+      {/* Daily view with time grid */}
       {viewMode === 'daily' && (
         <>
-{false && <View style={styles.dailyNavigation}>
+          {/* Daily navigation */}
+          <View style={styles.dailyNavigation}>
             <TouchableOpacity
               onPress={() => {
                 const prevDay = new Date(selectedDate);
@@ -938,7 +2711,7 @@ const currentIndicatorTop = useMemo(() => {
               }}
               style={styles.dailyNavButton}
             >
-              <Ionicons name="chevron-back" size={22} color="#1d342e" />
+              <Ionicons name="chevron-back" size={24} color="#1F2937" />
             </TouchableOpacity>
 
             <View style={styles.dailyDateDisplay}>
@@ -946,10 +2719,10 @@ const currentIndicatorTop = useMemo(() => {
                 styles.dailyDateText,
                 selectedDate.toDateString() === new Date().toDateString() && styles.dailyDateTextToday
               ]}>
-                {selectedDate.toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US', {
-                  weekday: 'long',
-                  month: 'long',
-                  day: 'numeric'
+                {selectedDate.toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US', { 
+                  weekday: 'long', 
+                  month: 'long', 
+                  day: 'numeric' 
                 })}
               </Text>
             </View>
@@ -962,143 +2735,126 @@ const currentIndicatorTop = useMemo(() => {
               }}
               style={styles.dailyNavButton}
             >
-              <Ionicons name="chevron-forward" size={22} color="#1d342e" />
+              <Ionicons name="chevron-forward" size={24} color="#1F2937" />
             </TouchableOpacity>
-          </View>}
+          </View>
 
-          <ScrollView
-            style={{ flex: 1 }}
-            contentContainerStyle={{ paddingBottom: 120 }}
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.dailyTimelineWrapper}>
-<View style={styles.dailyTimelineHours}>
-                {timelineHours.map((hour) => (
-                  <View key={hour} style={{ height: HOUR_BLOCK_HEIGHT }}>
-                    {/* Main hour label */}
-                    <View style={[styles.dailyHourRow, { height: HOUR_BLOCK_HEIGHT / 4 }]}>
-                      <Text style={styles.dailyHourLabel}>
-                        {hour.toString().padStart(2, '0')}
-                        <Text style={styles.dailyHourLabelSuffix}>:00</Text>
+          {/* Time grid */}
+          <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+            <View style={{ paddingHorizontal: 16, paddingBottom: 40 }}>
+              {Array.from({ length: 14 }, (_, i) => i + 8).map((hour) => {
+                const bookingsAtHour = bookingsForDay.filter(booking => {
+                  const bookingStart = new Date(booking.start_at);
+                  return bookingStart.getHours() === hour;
+                });
+
+                const now = new Date();
+                const isCurrentHour = now.getHours() === hour && 
+                                      selectedDate.toDateString() === now.toDateString();
+
+                return (
+                  <View key={hour} style={styles.dailyTimeRow}>
+                    {/* Time label */}
+                    <View style={styles.dailyTimeLabel}>
+                      <Text style={styles.dailyTimeLabelText}>
+                        {hour.toString().padStart(2, '0')}:00
                       </Text>
                     </View>
-                    
-                    {/* :15 mark */}
-                    <View style={[styles.dailyHourRow, { height: HOUR_BLOCK_HEIGHT / 4 }]}>
-                      <Text style={styles.dailyMinuteLabel}>:15</Text>
-                    </View>
-                    
-                    {/* :30 mark */}
-                    <View style={[styles.dailyHourRow, { height: HOUR_BLOCK_HEIGHT / 4 }]}>
-                      <Text style={styles.dailyMinuteLabel}>:30</Text>
-                    </View>
-                    
-                    {/* :45 mark */}
-                    <View style={[styles.dailyHourRow, { height: HOUR_BLOCK_HEIGHT / 4 }]}>
-                      <Text style={styles.dailyMinuteLabel}>:45</Text>
+
+                    {/* Time slot */}
+                    <View style={[
+                      styles.dailyTimeSlot,
+                      isCurrentHour && styles.dailyTimeSlotCurrent
+                    ]}>
+                      {bookingsAtHour.length === 0 ? (
+                        <Pressable 
+                          style={styles.dailyEmptySlot}
+                          onPress={() => {
+                            const newBooking = new Date(selectedDate);
+                            newBooking.setHours(hour, 0, 0, 0);
+                            onCreateBooking?.(newBooking);
+                          }}
+                        >
+                          <Text style={styles.dailyEmptySlotText}>+</Text>
+                        </Pressable>
+                      ) : (
+                        <View style={styles.dailyBookingsContainer}>
+                          {bookingsAtHour.map((booking) => {
+                            const service = services.find(s => s.id === booking.service_id);
+                            const staffMember = staff.find(s => s.id === booking.staff_id);
+                            const startTime = new Date(booking.start_at);
+                            
+                            return (
+                              <Pressable
+                                key={booking.id}
+                                onPress={() => onPressBooking?.(booking)}
+                                style={[
+                                  styles.dailyBooking,
+                                  { backgroundColor: staffMember?.color || '#1d342e' }
+                                ]}
+                              >
+                                <Text style={styles.dailyBookingClient}>
+                                  {booking.client_name}
+                                </Text>
+                                <Text style={styles.dailyBookingService}>
+                                  {service?.name || t('service')}
+                                </Text>
+                                <Text style={styles.dailyBookingTime}>
+                                  {startTime.toLocaleTimeString([], { 
+                                    hour: '2-digit', 
+                                    minute: '2-digit' 
+                                  })} • {booking.duration_min || 60} min
+                                </Text>
+                              </Pressable>
+                            );
+                          })}
+                        </View>
+                      )}
                     </View>
                   </View>
-                ))}
-              </View>
-
-              <View style={styles.dailyTimelineBody}>
-                <View style={[styles.dailyTimelineGrid, { height: timelineHeight }]}>
-                  {Array.from({ length: (TIMELINE_END_HOUR - TIMELINE_START_HOUR) * 2 + 1 }, (_, idx) => {
-                    const isHour = idx % 2 === 0;
-                    return (
-                      <View
-                        key={`line-${idx}`}
-                        style={[
-                          styles.dailyTimelineLine,
-                          isHour && styles.dailyTimelineLineHour,
-                          { top: idx * HALF_HOUR_HEIGHT },
-                        ]}
-                      />
-                    );
-                  })}
-
-                  {currentIndicatorTop !== null && (
-                    <View style={[styles.dailyCurrentTimeIndicator, { top: currentIndicatorTop }]}>
-                      <View style={styles.dailyCurrentTimeDot} />
-                      <View style={styles.dailyCurrentTimeLine} />
-                    </View>
-                  )}
-
-        {positionedBookings.length === 0 && (
-                    <View style={styles.dailyTimelineEmpty}>
-                      <Ionicons name="calendar-clear-outline" size={48} color="#c7a864" />
-                      <Text style={styles.dailyEmptyStateTitle}>{t('noBookings')}</Text>
-                      <TouchableOpacity 
-                        style={styles.emptyStateButton}
-                        onPress={handleCreateBooking}
-                      >
-                        <Text style={styles.emptyStateButtonText}>{t('addBooking')}</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-
-                  {positionedBookings.map(({ booking, top, height, start, duration, staffMember, service, color, laneIndex, laneCount }) => {
-                    const readableRange = formatRange(start, duration);
-                    const offset = 8;
-                    const cardLeft = offset + laneIndex * OVERLAP_CARD_SPACING;
-                    const cardRight = offset + Math.max(0, (laneCount - laneIndex - 1) * OVERLAP_CARD_SPACING);
-                    const cardStyle = { top, height, left: cardLeft, right: cardRight, zIndex: 2 + laneIndex };
-                    const baseColor = color || '#1d342e';
-                    const cardBg = lightenColor(baseColor, 0.94);
-                    const cardBorder = lightenColor(baseColor, 0.74);
-                    const accentColor = lightenColor(baseColor, 0.52);
-                    const durationChipBg = lightenColor(baseColor, 0.96);
-                    const durationChipBorder = lightenColor(baseColor, 0.82);
-                    const infoTextColor = lightenColor(baseColor, 0.28);
-                    const shadowColor = lightenColor(baseColor, 0.65);
-                    const durationLabel = `${Math.max(duration || 0, 15)} min`;
-                    const clientName = (booking.client_name || '').trim() || t('client');
-                    const serviceName = (service?.name || '').trim() || t('service');
-                    const staffLabel = staffMember?.name ? staffMember.name : t('staff');
-                    const primaryLine = `${clientName} \u2022 ${serviceName}`;
-                    const secondaryLine = `${t('staff')}: ${staffLabel}`;
-                    return (
-                      <Pressable
-                        key={booking.id}
-                        onPress={() => onPressBooking?.(booking)}
-                        style={[
-                          styles.dailyTimelineCard,
-                          cardStyle,
-                          { backgroundColor: cardBg, borderColor: cardBorder, shadowColor }
-                        ]}
-                      >
-                        <View style={[styles.dailyTimelineCardAccent, { backgroundColor: accentColor }]} />
-                        <View style={styles.dailyTimelineCardContent}>
-                          <View style={styles.dailyTimelineCardHeader}>
-                            <Text style={[styles.dailyTimelineCardTime, { color: baseColor }]}>{readableRange}</Text>
-                            <View
-                              style={[
-                                styles.dailyTimelineDurationChip,
-                                { backgroundColor: durationChipBg, borderColor: durationChipBorder }
-                              ]}
-                            >
-                              <Ionicons name="time-outline" size={12} color={baseColor} />
-                              <Text style={[styles.dailyTimelineDurationText, { color: baseColor }]}>{durationLabel}</Text>
-                            </View>
-                          </View>
-                          <Text style={styles.dailyTimelineCardPrimary}>{primaryLine}</Text>
-                          <Text style={[styles.dailyTimelineCardSecondary, { color: infoTextColor }]}>{secondaryLine}</Text>
-                        </View>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
+                );
+              })}
             </View>
           </ScrollView>
         </>
       )}
 
       {/* Monthly view placeholder */}
-      {/* Monthly view placeholder */}
       {viewMode === 'monthly' && (
         <>
-          
+          {/* Monthly navigation */}
+          <View style={styles.dailyNavigation}>
+            <TouchableOpacity
+              onPress={() => {
+                const prevMonth = new Date(selectedDate);
+                prevMonth.setMonth(prevMonth.getMonth() - 1);
+                setSelectedDate(prevMonth);
+              }}
+              style={styles.dailyNavButton}
+            >
+              <Ionicons name="chevron-back" size={24} color="#1F2937" />
+            </TouchableOpacity>
+
+            <View style={styles.dailyDateDisplay}>
+              <Text style={styles.dailyDateText}>
+                {selectedDate.toLocaleDateString(lang === 'pl' ? 'pl-PL' : 'en-US', { 
+                  month: 'long', 
+                  year: 'numeric' 
+                })}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              onPress={() => {
+                const nextMonth = new Date(selectedDate);
+                nextMonth.setMonth(nextMonth.getMonth() + 1);
+                setSelectedDate(nextMonth);
+              }}
+              style={styles.dailyNavButton}
+            >
+              <Ionicons name="chevron-forward" size={24} color="#1F2937" />
+            </TouchableOpacity>
+          </View>
 
           {/* Monthly calendar grid */}
           <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
@@ -1106,7 +2862,7 @@ const currentIndicatorTop = useMemo(() => {
               {/* Day headers */}
               <View style={{ flexDirection: 'row', marginBottom: 12 }}>
                 {(lang === 'pl' 
-                  ? ['Pn', 'Wt', 'Sr', 'Cz', 'Pt', 'Sb', 'Nd']
+                  ? ['Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'Sb', 'Nd']
                   : ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
                 ).map((day, index) => (
                   <View key={index} style={{ flex: 1, alignItems: 'center', paddingVertical: 8 }}>
@@ -1120,8 +2876,8 @@ const currentIndicatorTop = useMemo(() => {
               {/* Calendar days */}
               <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
                 {(() => {
-                  const firstDay = new Date(monthlyViewDate.getFullYear(), monthlyViewDate.getMonth(), 1);
-                  const lastDay = new Date(monthlyViewDate.getFullYear(), monthlyViewDate.getMonth() + 1, 0);
+                  const firstDay = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+                  const lastDay = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0);
                   const startDate = new Date(firstDay);
                   
                   const dayOfWeek = firstDay.getDay();
@@ -1139,7 +2895,7 @@ const currentIndicatorTop = useMemo(() => {
                   today.setHours(0, 0, 0, 0);
                   
                   return days.map((day, index) => {
-                    const isCurrentMonth = day.getMonth() === monthlyViewDate.getMonth();
+                    const isCurrentMonth = day.getMonth() === selectedDate.getMonth();
                     const isToday = day.toDateString() === today.toDateString();
                     const dayBookings = bookings.filter(b => {
                       const bookingDate = new Date(b.start_at);
@@ -1180,7 +2936,7 @@ const currentIndicatorTop = useMemo(() => {
                           </Text>
                           {dayBookings.length > 0 && (
                             <View style={{
-                              width: 8,
+                              width: 6,
                               height: 6,
                               borderRadius: 3,
                               backgroundColor: '#c7a864',
@@ -1212,7 +2968,7 @@ function ScheduleView({ weekStart, bookings, services, staff, onPressBooking, on
   const { t, lang } = useSettings();
   
   const daysOfWeek = lang === 'pl' 
-    ? ['Pn', 'Wt', 'Sr', 'Cz', 'Pt', 'Sb', 'Nd']
+    ? ['Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'Sb', 'Nd']
     : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   // Working hours from 8 AM to 8 PM (20:00)
@@ -1249,70 +3005,54 @@ function ScheduleView({ weekStart, bookings, services, staff, onPressBooking, on
 return (
   <View style={styles.calendarWrapper}>
     {/* View Mode Dropdown */}
-{/* Clean Header with Menu */}
-<View style={styles.calendarCleanHeader}>
-  <Pressable 
-    style={styles.calendarMenuButton}
-    onPress={() => setShowViewMenu(!showViewMenu)}
-  >
-    <Ionicons name="menu" size={24} color="#1d342e" />
-  </Pressable>
-  
-  <Text style={styles.calendarHeaderTitle}>
-    {viewMode === 'daily' ? 'Daily' : 
-     viewMode === 'weekly' ? 'Schedule' : 
-     'Monthly'}
-  </Text>
-  
-  {showViewMenu && (
-    <View style={styles.calendarCleanDropdown}>
+    <View style={styles.calendarViewSwitcher}>
       <Pressable 
-        style={[styles.calendarCleanOption, viewMode === 'daily' && styles.calendarCleanOptionActive]}
-        onPress={() => { 
-              setViewMode('daily'); 
-              setShowViewMenu(false); 
-              const today = new Date();
-              setSelectedDate(today);
-              setWeekStart(startOfWeekMonday(today));
-            }}
+        style={styles.viewSwitcherButton}
+        onPress={() => setShowViewMenu(!showViewMenu)}
       >
-        <Ionicons name="today" size={20} color={viewMode === 'daily' ? '#c7a864' : '#7b8277'} />
-        <Text style={[styles.calendarCleanOptionText, viewMode === 'daily' && styles.calendarCleanOptionTextActive]}>
-          Daily
+        <Ionicons name="menu" size={20} color="#1d342e" />
+        <Text style={styles.viewSwitcherText}>
+          {viewMode === 'daily' ? (lang === 'pl' ? 'Dzienny' : 'Daily') : 
+           viewMode === 'weekly' ? (lang === 'pl' ? 'Tygodniowy' : 'Weekly') : 
+           (lang === 'pl' ? 'Miesięczny' : 'Monthly')}
         </Text>
+        <Ionicons name={showViewMenu ? "chevron-up" : "chevron-down"} size={16} color="#666" />
       </Pressable>
 
-      {SHOW_SCHEDULE_VIEW && (
-        <Pressable 
-          style={[styles.calendarCleanOption, viewMode === 'weekly' && styles.calendarCleanOptionActive]}
-          onPress={() => { setViewMode('weekly'); setShowViewMenu(false); }}
-        >
-          <Ionicons name="calendar" size={20} color={viewMode === 'weekly' ? '#c7a864' : '#7b8277'} />
-          <Text style={[styles.calendarCleanOptionText, viewMode === 'weekly' && styles.calendarCleanOptionTextActive]}>
-            Schedule
-          </Text>
-        </Pressable>
+      {showViewMenu && (
+        <View style={styles.viewSwitcherDropdown}>
+          <Pressable 
+            style={[styles.viewSwitcherOption, viewMode === 'daily' && styles.viewSwitcherOptionActive]}
+            onPress={() => { setViewMode('daily'); setShowViewMenu(false); }}
+          >
+            <Ionicons name="today" size={18} color={viewMode === 'daily' ? '#c7a864' : '#666'} />
+            <Text style={[styles.viewSwitcherOptionText, viewMode === 'daily' && styles.viewSwitcherOptionTextActive]}>
+              {lang === 'pl' ? 'Dzienny' : 'Daily'}
+            </Text>
+          </Pressable>
+
+          <Pressable 
+            style={[styles.viewSwitcherOption, viewMode === 'weekly' && styles.viewSwitcherOptionActive]}
+            onPress={() => { setViewMode('weekly'); setShowViewMenu(false); }}
+          >
+            <Ionicons name="calendar" size={18} color={viewMode === 'weekly' ? '#c7a864' : '#666'} />
+            <Text style={[styles.viewSwitcherOptionText, viewMode === 'weekly' && styles.viewSwitcherOptionTextActive]}>
+              {lang === 'pl' ? 'Tygodniowy' : 'Weekly'}
+            </Text>
+          </Pressable>
+
+          <Pressable 
+            style={[styles.viewSwitcherOption, viewMode === 'monthly' && styles.viewSwitcherOptionActive]}
+            onPress={() => { setViewMode('monthly'); setShowViewMenu(false); }}
+          >
+            <Ionicons name="calendar-outline" size={18} color={viewMode === 'monthly' ? '#c7a864' : '#666'} />
+            <Text style={[styles.viewSwitcherOptionText, viewMode === 'monthly' && styles.viewSwitcherOptionTextActive]}>
+              {lang === 'pl' ? 'Miesięczny' : 'Monthly'}
+            </Text>
+          </Pressable>
+        </View>
       )}
-
-      <Pressable 
-        style={[styles.calendarCleanOption, viewMode === 'monthly' && styles.calendarCleanOptionActive]}
-        onPress={() => { 
-              setViewMode('monthly'); 
-              setShowViewMenu(false); 
-              const today = new Date();
-              setSelectedDate(today);
-              setMonthlyViewDate(today);
-              setWeekStart(startOfWeekMonday(today));
-            }}
-      >
-        <Ionicons name="calendar-outline" size={20} color={viewMode === 'monthly' ? '#c7a864' : '#7b8277'} />
-        <Text style={[styles.calendarCleanOptionText, viewMode === 'monthly' && styles.calendarCleanOptionTextActive]}>
-          Monthly
-        </Text>
-      </Pressable>
     </View>
-  )}
-</View>
 
     {/* Render based on view mode */}
     {viewMode === 'daily' && (
@@ -1325,7 +3065,7 @@ return (
       />
     )}
 
-    {SHOW_SCHEDULE_VIEW && viewMode === 'weekly' && (
+    {viewMode === 'weekly' && (
       <>
         <TouchableOpacity
           onPress={() => shiftWeek(-1)}
@@ -1334,52 +3074,32 @@ return (
         
         <View style={styles.calendarWeekHeaderClean}>
           <View style={styles.calendarDayStripClean}>
-            {(() => {
-              const todayString = new Date().toDateString();
-              return weekDays.map((day, idx) => {
-                const isActive = day.toDateString() === selectedDate.toDateString();
-                const isToday = day.toDateString() === todayString;
-                const dayIndex = (day.getDay() + 6) % 7;
-                return (
-                  <Pressable
-                    key={day.toISOString()}
-                    onPress={() => handleDayPress(day)}
-                    style={[
-                      styles.calendarDayItemClean,
-                      isToday && styles.calendarDayItemTodayClean,
-                      isActive && styles.calendarDayItemActiveClean
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.calendarDayLabelClean,
-                        isToday && styles.calendarDayLabelTodayClean,
-                        isActive && styles.calendarDayLabelActiveClean
-                      ]}
-                    >
-                      {weekdayShort[dayIndex]}
+            {weekDays.map((day, idx) => {
+              const isActive = day.toDateString() === selectedDate.toDateString();
+              const dayIndex = (day.getDay() + 6) % 7;
+              return (
+                <Pressable
+                  key={day.toISOString()}
+                  onPress={() => handleDayPress(day)}
+                  style={styles.calendarDayItemClean}
+                >
+                  <Text style={styles.calendarDayLabelClean}>
+                    {weekdayShort[dayIndex]}
+                  </Text>
+                  <View style={[
+                    styles.calendarDayCircleClean,
+                    isActive && styles.calendarDayCircleActiveClean
+                  ]}>
+                    <Text style={[
+                      styles.calendarDayNumberClean,
+                      isActive && styles.calendarDayNumberActiveClean
+                    ]}>
+                      {day.getDate()}
                     </Text>
-                    <View
-                      style={[
-                        styles.calendarDayCircleClean,
-                        isToday && styles.calendarDayCircleTodayClean,
-                        isActive && styles.calendarDayCircleActiveClean
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.calendarDayNumberClean,
-                          isToday && styles.calendarDayNumberTodayClean,
-                          isActive && styles.calendarDayNumberActiveClean
-                        ]}
-                      >
-                        {day.getDate()}
-                      </Text>
-                    </View>
-                  </Pressable>
-                );
-              });
-            })()}
+                  </View>
+                </Pressable>
+              );
+            })}
           </View>
         </View>
 
@@ -1389,6 +3109,10 @@ return (
         />
 
         <ScrollView contentContainerStyle={styles.calendarListContentMockup} showsVerticalScrollIndicator={false}>
+          <View style={styles.calendarDateHeaderMockup}>
+            <Text style={styles.calendarDateHeaderTextMockup}>{dayHeadline}</Text>
+          </View>
+
           {bookingsForDay.length === 0 ? (
             <View style={styles.calendarEmptyState}>
               <Ionicons name="calendar-outline" size={22} color="#8a9a92" />
@@ -1413,6 +3137,7 @@ return (
                     <Ionicons name="time-outline" size={16} color="#888" style={{ marginTop: 2 }} />
                   </View>
                   <View style={styles.scheduleCardBodyMockup}>
+                    <Text style={styles.scheduleCardNameMockup}>{booking.client_name || t('client')}</Text>
                     <Text style={styles.scheduleCardServiceMockup}>{service?.name || t('service')}</Text>
                   </View>
                 </Pressable>
@@ -1426,7 +3151,7 @@ return (
     {viewMode === 'monthly' && (
       <View style={{ padding: 20, alignItems: 'center' }}>
         <Text style={{ fontSize: 16, color: '#666' }}>
-          {lang === 'pl' ? 'Widok miesieczny - wkr?tce' : 'Monthly view - coming soon'}
+          {lang === 'pl' ? 'Widok miesięczny - wkrótce' : 'Monthly view - coming soon'}
         </Text>
       </View>
     )}
@@ -1442,29 +3167,23 @@ function RootApp() {
   const [profile, setProfile] = useState(null);
 
 // TEMPORARY: Mock user for testing - REMOVE THIS WHEN RE-ENABLING AUTH
-// TEMPORARY: Mock user for testing - REMOVE THIS WHEN RE-ENABLING AUTH
 useEffect(() => {
   setUser({ 
-    id: 'jose-admin-123', 
-    email: 'josemunoz@outlook.com.au',
-    user_metadata: { full_name: 'Jose Munoz' }
+    id: 'test-user-123', 
+    email: 'test@test.com',
+    user_metadata: { full_name: 'Test User' }
   });
   setProfile({ 
-    user_id: 'jose-admin-123', 
-    full_name: 'Jose Munoz', 
+    user_id: 'test-user-123', 
+    full_name: 'Test User', 
     role: 'admin' 
   });
 }, []);
 
-  const {
-    services,
-    staff,
-    bookings,
-    syncing,
-    setSyncing,
-    loadServices,
-    reloadAll,
-  } = useSchedulerData(user, profile);
+  const [services, setServices] = useState([]);
+  const [staff, setStaff] = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [syncing, setSyncing] = useState(false);
 
   const [editBooking, setEditBooking] = useState(null);
   const [manageBooking, setManageBooking] = useState(null);
@@ -1473,11 +3192,29 @@ useEffect(() => {
 
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const {
-    customAlert,
-    showAlert: showCustomAlert,
-    hideAlert: hideCustomAlert,
-  } = useCustomAlert();
+  // Custom alert state
+  const [customAlert, setCustomAlert] = useState({
+    visible: false,
+    title: '',
+    message: '',
+    type: 'info',
+    buttons: []
+  });
+
+  // Helper function to show custom alerts
+  const showCustomAlert = (title, message, type = 'info', buttons = []) => {
+    setCustomAlert({
+      visible: true,
+      title,
+      message,
+      type,
+      buttons
+    });
+  };
+
+  const hideCustomAlert = () => {
+    setCustomAlert(prev => ({ ...prev, visible: false }));
+  };
 
   /* Deep link routing */
   useEffect(() => {
@@ -1528,7 +3265,103 @@ useEffect(() => {
     loadProfile();
   }, [user?.id]);
 
-  // Data fetching and realtime syncing handled via useSchedulerData hook
+  /* Data */
+  const loadServices = async () => {
+    setSyncing(true);
+    const { data } = await supabase.from('services').select('*').order('name', { ascending: true });
+    setServices(data || []);
+    setSyncing(false);
+  };
+  const loadStaff = async () => {
+    setSyncing(true);
+    const { data } = await supabase.from('staff').select('*').order('name', { ascending: true });
+    const cleaned = (data || []).filter((s) => !((s.name || '').toLowerCase().includes('magda')));
+    // Ensure Lucyna first if present
+    const lucyna = cleaned.find((s) => (s.name || '').toLowerCase().includes('lucyna'));
+    const rest = cleaned.filter((s) => s !== lucyna);
+    setStaff(lucyna ? [lucyna, ...rest] : cleaned);
+    setSyncing(false);
+  };
+const loadBookings = async () => {
+  setSyncing(true);
+  
+  // Check if current user is admin
+  const userEmail = (user?.email || '').toLowerCase();
+  const userRole = profile?.role || 'staff';
+  const isUserAdmin = userEmail === 'josemunoz@outlook.com.au' || userRole === 'admin';
+  
+  console.log('🔍 Admin Check:', { userEmail, userRole, isUserAdmin });
+
+  // Build query - admins see ALL bookings, regular users only see active ones
+  let query = supabase.from('bookings').select('*');
+  
+  // DEBUG: Check what values we're getting
+  console.log('🔍 Admin Check:', {
+    userEmail,
+    userRole,
+    isUserAdmin
+  });
+  
+  const { data } = await query.order('start_at', { ascending: true });
+  setBookings(data || []);
+  setSyncing(false);
+};
+  const reloadAll = async () => {
+    setSyncing(true);
+    await Promise.all([loadServices(), loadStaff(), loadBookings()]);
+    setSyncing(false);
+  };
+
+  useEffect(() => { if (user) reloadAll(); }, [user?.id]);
+
+  // Real-time subscriptions for live data sync
+  useEffect(() => {
+    if (!user?.id) return;
+
+    // Subscribe to bookings changes
+    const bookingsChannel = supabase
+      .channel('bookings_changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'bookings' },
+        (payload) => {
+          console.log('Bookings change detected:', payload);
+          loadBookings(); // Reload bookings when any change occurs
+        }
+      )
+      .subscribe();
+
+    // Subscribe to services changes
+    const servicesChannel = supabase
+      .channel('services_changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'services' },
+        (payload) => {
+          console.log('Services change detected:', payload);
+          loadServices(); // Reload services when any change occurs
+        }
+      )
+      .subscribe();
+
+    // Subscribe to staff changes
+    const staffChannel = supabase
+      .channel('staff_changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'staff' },
+        (payload) => {
+          console.log('Staff change detected:', payload);
+          loadStaff(); // Reload staff when any change occurs
+        }
+      )
+      .subscribe();
+
+    // Cleanup subscriptions on unmount or user change
+    return () => {
+      console.log('Cleaning up real-time subscriptions');
+      bookingsChannel.unsubscribe();
+      servicesChannel.unsubscribe();
+      staffChannel.unsubscribe();
+    };
+  }, [user?.id]);
 
   const effectiveRole = profile?.role || 'staff';
   // Force-admin override for Jose's account, while keeping role-based for others
@@ -1554,15 +3387,13 @@ useEffect(() => {
 
     const { data: overlaps } = await supabase
       .from('bookings')
-      .select('id, start_at, duration_min, staff_id, client_name, status')
+      .select('id, start_at, duration_min, staff_id, client_name')
       .eq('staff_id', staffId);
-
-    const filteredOverlaps = (overlaps || []).filter((b) => !b.status || b.status === 'active' || b.status === 'scheduled');
 
     let directConflict = false;
     let proximityWarning = null;
 
-    for (const b of filteredOverlaps) {
+    for (const b of overlaps || []) {
       if (excludeId && b.id === excludeId) continue;
       
       const s = new Date(b.start_at);
@@ -1643,7 +3474,7 @@ useEffect(() => {
     if (conflictResult.hasDirectConflict) {
       showCustomAlert(
         lang === 'pl' ? 'Konflikt rezerwacji' : 'Booking Conflict', 
-        lang === 'pl' ? 'Wymagane jest minimum 30 minut przerwy miedzy rezerwacjami.' : 'Minimum 30 minutes gap required between bookings.',
+        lang === 'pl' ? 'Wymagane jest minimum 30 minut przerwy między rezerwacjami.' : 'Minimum 30 minutes gap required between bookings.',
         'warning'
       );
       return false;
@@ -1660,9 +3491,9 @@ useEffect(() => {
       
       return new Promise((resolve) => {
         showCustomAlert(
-          lang === 'pl' ? 'Nadchodzaca rezerwacja' : 'Upcoming Booking',
+          lang === 'pl' ? 'Nadchodząca rezerwacja' : 'Upcoming Booking',
           lang === 'pl' 
-            ? `Istnieje nadchodzaca rezerwacja o ${warningTime}.`
+            ? `Istnieje nadchodząca rezerwacja o ${warningTime}.`
             : `There is an upcoming booking at ${warningTime}.`,
           'warning',
           [
@@ -1752,7 +3583,7 @@ const deleteBooking = async (id) => {
   }
   showCustomAlert(
     'Success', 
-    lang === 'pl' ? 'Rezerwacja usunieta!' : 'Booking deleted successfully!', 
+    lang === 'pl' ? 'Rezerwacja usunięta!' : 'Booking deleted successfully!', 
     'success'
   );
   // Data will be automatically refreshed by real-time subscription
@@ -1817,16 +3648,36 @@ const deleteBooking = async (id) => {
       >
         {({ navigation }) => (
           <ScreenScaffold
-            styles={styles}
             title={t('calendar')}
             subtitle=""
             onOpenSettings={() => setSettingsOpen(true)}
             user={user}
             staff={staff}
+            actionSlot={
+              <View style={styles.headerActionGroup}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setEditBooking({
+                      start_at: new Date().toISOString(),
+                      client_name: '',
+                      client_phone: '',
+                      client_email: '',
+                      service_id: services[0]?.id,
+                      staff_id: staff[0]?.id,
+                      duration_min: 30,
+                    });
+                    navigation.navigate('NewBooking');
+                  }}
+                  style={styles.headerQuickAction}
+                  accessibilityRole="button"
+                  accessibilityLabel="New booking"
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
+                  <Ionicons name="add" size={20} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            }
             isSyncing={syncing}
-            showSettingsButton={false}
-            showTitle={false}
-            headerPaddingBottom={16}
           >
             <CalendarScreen
               bookings={bookings}
@@ -1850,7 +3701,6 @@ const deleteBooking = async (id) => {
                 });
                 navigation.navigate('NewBooking');
               }}
-              onOpenSettings={() => setSettingsOpen(true)}
             />
           </ScreenScaffold>
         )}
@@ -1862,7 +3712,6 @@ const deleteBooking = async (id) => {
       >
         {({ navigation, route }) => (
           <ScreenScaffold
-            styles={styles}
             title={t('newBooking')}
             subtitle={greeting}
             onOpenSettings={() => setSettingsOpen(true)}
@@ -1877,10 +3726,10 @@ const deleteBooking = async (id) => {
               initial={editBooking}
               onSaved={() => navigation.navigate('Bookings')}
               showAlert={showCustomAlert}
+              checkTimeConflict={checkTimeConflict}
               navigation={navigation}
               route={route}
               setEditBooking={setEditBooking}
-              styles={styles}
             />
           </ScreenScaffold>
         )}
@@ -1892,7 +3741,6 @@ const deleteBooking = async (id) => {
       >
         {({ navigation }) => (
           <ScreenScaffold
-            styles={styles}
             title={t('bookings')}
             subtitle={greeting}
             onOpenSettings={() => setSettingsOpen(true)}
@@ -1910,7 +3758,6 @@ const deleteBooking = async (id) => {
               }}
               onDelete={deleteBooking}
               showAlert={showCustomAlert}
-              styles={styles}
             />
           </ScreenScaffold>
         )}
@@ -1922,7 +3769,6 @@ const deleteBooking = async (id) => {
       >
         {() => (
           <ScreenScaffold
-            styles={styles}
             title={t('services')}
             subtitle={greeting}
             onOpenSettings={() => setSettingsOpen(true)}
@@ -1934,7 +3780,6 @@ const deleteBooking = async (id) => {
               services={services}
               reload={loadServices}
               showAlert={showCustomAlert}
-              styles={styles}
             />
           </ScreenScaffold>
         )}
@@ -1947,7 +3792,6 @@ const deleteBooking = async (id) => {
         >
           {() => (
             <ScreenScaffold
-              styles={styles}
               title={t('admin')}
               subtitle={greeting}
               onOpenSettings={() => setSettingsOpen(true)}
@@ -1960,7 +3804,6 @@ const deleteBooking = async (id) => {
                 currentEmail={(user?.email || '').toLowerCase()}
                 onPreviewRole={({ role, label }) => showCustomAlert('Preview', `${role} - ${label}`, 'info')}
                 showAlert={showCustomAlert}
-                styles={styles}
               />
             </ScreenScaffold>
           )}
@@ -1991,22 +3834,27 @@ const deleteBooking = async (id) => {
                   navigation.goBack();
                 }}
                 showAlert={showCustomAlert}
-                styles={styles}
+                checkTimeConflict={checkTimeConflict}
               />
             )}
           </Stack.Screen>
         </Stack.Navigator>
       </NavigationContainer>
 
-<SettingsModal
+     <SettingsModal
   open={settingsOpen}
   onClose={() => setSettingsOpen(false)}
   onSignOut={signOut}
   onRequestEmailChange={onRequestEmailChange}
+  isAdmin={isAdmin}
   user={user}
-  currentUserRole={profile?.role || 'staff'}
-  styles={styles}
+  profile={profile}
+  bookings={bookings}
+  services={services}
+  staff={staff}
+  showAlert={showCustomAlert}
 />
+
       <CustomAlert
         visible={customAlert.visible}
         title={customAlert.title}
@@ -2019,7 +3867,36 @@ const deleteBooking = async (id) => {
   );
 }
 
-/* ====== BELOW THIS: The export should be here ====== */
+/* --- Settings Modal (extracted to keep TopBar simple) --- */
+function SettingsModal({ open, onClose, onSignOut, onRequestEmailChange }) {
+  const { t, lang, setLang } = useSettings();
+  const [newEmail, setNewEmail] = useState('');
+  return (
+    <Modal visible={open} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.modalBack} onPress={onClose}>
+        <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+          <Text style={styles.modalTitle}>{t('profileSettings')}</Text>
+
+          <Text style={styles.label}>{t('language')}</Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <BigBtn text="PL" onPress={() => setLang('pl')} />
+            <BigBtn text="EN" onPress={() => setLang('en')} />
+          </View>
+
+          <Text style={[styles.label, { marginTop: 12 }]}>{t('changeEmail')}</Text>
+          <Input value={newEmail} onChangeText={setNewEmail} placeholder="new@email.com" autoCapitalize="none" keyboardType="email-address" />
+          <BigBtn text="Send email change link" onPress={() => onRequestEmailChange(newEmail)} />
+
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }}>
+            <BigBtn text={t('close')} onPress={onClose} />
+            <BigBtn text={t('signOut')} kind="danger" onPress={onSignOut} />
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -2038,7 +3915,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
 screenHeaderWrapper: {
-  paddingTop: Platform.select({ ios: 24, android: 36 }),
+  paddingTop: Platform.select({ ios: 48, android: 76 }),
   paddingBottom: 42,
   paddingHorizontal: 24,
   backgroundColor: '#faf7f2',
@@ -2050,7 +3927,7 @@ screenHeaderWrapper: {
   },
   screenHeading: {
     flex: 1,
-    gap: 6,
+    gap: 4,
   },
 screenTitle: {
   fontSize: 30,
@@ -2071,7 +3948,7 @@ screenTitle: {
   headerCircleButton: {
     width: 40,
     height: 40,
-    borderRadius: 24,
+    borderRadius: 20,
     backgroundColor: '#ede3d4',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2289,7 +4166,7 @@ scheduleCard: {
   },
   scheduleCardBodyNew: {
     flex: 1,
-    gap: 6,
+    gap: 4,
   },
   scheduleCardNameNew: {
     fontSize: 16,
@@ -2325,7 +4202,7 @@ calendarDateHeader: {
   },
   scheduleCardBody: {
     flex: 1,
-    gap: 6,
+    gap: 4,
   },
   scheduleCardName: {
     fontSize: 16,
@@ -2368,7 +4245,7 @@ calendarFab: {
   display: 'none',
 },
   mainTitleContainer: {
-    backgroundColor: '#c7a864',
+    backgroundColor: '#1d342e',
     paddingTop: 50,
     paddingBottom: 25,
     paddingHorizontal: 20,
@@ -2429,15 +4306,15 @@ calendarFab: {
     right: 30,
     height: 8,
     backgroundColor: 'rgba(255, 255, 255, 0.25)',
-    borderRadius: 24,
+    borderRadius: 20,
     shadowColor: 'rgba(255, 255, 255, 0.8)',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.6,
-    shadowRadius: 16,
+    shadowRadius: 12,
     elevation: 8,
   },
   headerTitleContainer: {
-    backgroundColor: '#c7a864',
+    backgroundColor: '#1d342e',
     paddingVertical: 8,
     paddingHorizontal: 24,
     borderRadius: 18,
@@ -2446,7 +4323,7 @@ calendarFab: {
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 6,
-    elevation: 6,
+    elevation: 4,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
   },
@@ -2473,7 +4350,7 @@ calendarFab: {
   userAvatarCircle: {
     width: 40,
     height: 40,
-    borderRadius: 24,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2492,14 +4369,14 @@ calendarFab: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingVertical: 14,
+    paddingVertical: 12,
     marginBottom: 28,
   },
   drawerAvatar: {
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: '#c7a864',
+    backgroundColor: '#1d342e',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14,
@@ -2536,7 +4413,7 @@ calendarFab: {
     marginTop: 4,
   },
   drawerItems: {
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
   },
   drawerItem: {
     flexDirection: 'row',
@@ -2548,7 +4425,7 @@ calendarFab: {
     backgroundColor: '#EFF4FF',
   },
   drawerItemActive: {
-    backgroundColor: '#c7a864',
+    backgroundColor: '#1d342e',
   },
   drawerLabel: {
     fontWeight: '800',
@@ -2561,8 +4438,26 @@ calendarFab: {
   },
   drawerFooter: {
     marginTop: 32,
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
   },
+  bigBtn: {
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 6,
+  },
+
+  card: {
+    backgroundColor: '#fff',
+    marginHorizontal: 12,
+    marginTop: 12,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#ac8c62',
+  },
+  cardTitle: { fontWeight: '900', marginBottom: 8, color: '#111827', fontSize: 18 },
   serviceBlock: {
     marginBottom: 20,
   },
@@ -2641,32 +4536,6 @@ calendarFab: {
   bookingService: { color: '#6B7280', fontWeight: '500', fontSize: 16 },
   bookingSub: { color: '#6B7280', fontSize: 15 },
   bookingNote: { color: '#374151', fontStyle: 'italic', marginTop: 4, fontSize: 15 },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  statusBadgeDeleted: {
-    backgroundColor: '#FEE2E2',
-    borderColor: '#EF4444',
-  },
-  statusBadgeModified: {
-    backgroundColor: '#FEF3C7',
-    borderColor: '#F59E0B',
-  },
-  statusBadgeLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  statusBadgeLabelDeleted: {
-    color: '#B91C1C',
-  },
-  statusBadgeLabelModified: {
-    color: '#92400E',
-  },
 
   /* Calendar header with month/year pickers */
 /* Calendar header with month/year pickers */
@@ -2682,7 +4551,7 @@ calTopRow: {
   flexDirection: 'row',
   alignItems: 'center',
   justifyContent: 'space-between',
-  flexWrap: 'wrap',     // wraps on very small screensno overlap
+  flexWrap: 'wrap',     // wraps on very small screens—no overlap
   rowGap: 8,
   columnGap: 8,
 },
@@ -2691,7 +4560,7 @@ navFixed: {
   alignItems: 'center',
 },
 navBtn: {
-  marginTop: 0,         // cancel BigBtn's default top margin (prevents "overlay" look)
+  marginTop: 0,         // cancel BigBtn’s default top margin (prevents “overlay” look)
 },
 monthCenterWrap: {
   flexGrow: 1,
@@ -2821,7 +4690,9 @@ customDropdownItemDurationSelected: {
   color: '#1d342e',
 },
 customDropdownCheckmark: {
+  fontSize: 16,
   color: '#1d342e',
+  fontWeight: 'bold',
 },
 
 /* Custom Calendar */
@@ -3153,6 +5024,85 @@ timeInputSeparator: {
   modalOverlay: { flex: 1, backgroundColor: '#0006', alignItems: 'center', justifyContent: 'center', padding: 16 },
   modalContent: { backgroundColor: '#fff', width: '92%', borderRadius: 16, padding: 16 },
 
+  // Custom Alert Styles
+  customAlertOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  customAlertContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 32,
+    width: '90%',
+    maxWidth: 400,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 20,
+  },
+  customAlertIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  customAlertIconText: {
+    fontSize: 32,
+    fontWeight: '700',
+  },
+  customAlertTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#111827',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  customAlertMessage: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 28,
+  },
+  customAlertButtons: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  customAlertButton: {
+    backgroundColor: '#1d342e',
+    paddingHorizontal: 32,
+    paddingVertical: 12,
+    borderRadius: 12,
+    minWidth: 100,
+    alignItems: 'center',
+  },
+  customAlertButtonCancel: {
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+  },
+  customAlertButtonDestructive: {
+    backgroundColor: '#EF4444',
+  },
+  customAlertButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  customAlertButtonTextCancel: {
+    color: '#6B7280',
+  },
+  customAlertButtonTextDestructive: {
+    color: '#fff',
+  },
+
   adminRow: {
     flexDirection: 'row',
     borderWidth: 1,
@@ -3202,8 +5152,8 @@ timeInputSeparator: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderRadius: 8,
     gap: 8,
   },
@@ -3211,7 +5161,7 @@ timeInputSeparator: {
     backgroundColor: '#fff',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.1,
     shadowRadius: 3,
     elevation: 2,
   },
@@ -3242,7 +5192,7 @@ timeInputSeparator: {
     justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 1,
   },
@@ -3254,7 +5204,7 @@ timeInputSeparator: {
   periodDisplay: {
     flex: 1,
     alignItems: 'center',
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
   },
   periodText: {
     fontSize: 20,
@@ -3321,7 +5271,6 @@ timeInputSeparator: {
   dailyTimeText: {
     fontSize: 12,
     fontWeight: '600',
-    letterSpacing: 0.2,
     color: '#6B7280',
     textAlign: 'right',
   },
@@ -3332,12 +5281,12 @@ timeInputSeparator: {
     paddingVertical: 4,
   },
   dailyBooking: {
-    backgroundColor: '#c7a864',
+    backgroundColor: '#1d342e',
     borderRadius: 8,
     padding: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.1,
     shadowRadius: 3,
     elevation: 2,
   },
@@ -3371,7 +5320,7 @@ timeInputSeparator: {
   },
   monthlyDayHeader: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: 12,
     alignItems: 'center',
   },
   monthlyDayHeaderText: {
@@ -3416,10 +5365,10 @@ timeInputSeparator: {
     gap: 2,
   },
   monthlyBookingDot: {
-    width: 8,
+    width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#c7a864',
+    backgroundColor: '#1d342e',
   },
   monthlyBookingMore: {
     fontSize: 10,
@@ -3432,8 +5381,8 @@ timeInputSeparator: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 18,
-    paddingVertical: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
@@ -3468,7 +5417,7 @@ timeInputSeparator: {
   headerDropdownTrigger: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     paddingVertical: 10,
     backgroundColor: '#F8FAFC',
     borderRadius: 8,
@@ -3501,13 +5450,13 @@ timeInputSeparator: {
     paddingBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
   dropdownSection: {
-    paddingHorizontal: 18,
-    paddingVertical: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
   },
@@ -3544,7 +5493,7 @@ timeInputSeparator: {
     fontWeight: '600',
   },
   todayButtonDropdown: {
-    backgroundColor: '#c7a864',
+    backgroundColor: '#1d342e',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 8,
@@ -3589,7 +5538,7 @@ timeInputSeparator: {
   },
   scheduleDayColumn: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: 12,
     alignItems: 'center',
     borderLeftWidth: 1,
     borderLeftColor: '#D1D5DB',
@@ -3677,13 +5626,13 @@ timeInputSeparator: {
     gap: 2,
   },
   scheduleBooking: {
-    backgroundColor: '#c7a864',
+    backgroundColor: '#1d342e',
     borderRadius: 6,
     padding: 8,
     marginHorizontal: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
   },
@@ -3813,12 +5762,12 @@ timeInputSeparator: {
     gap: 8,
   },
   dailyBookingNew: {
-    backgroundColor: '#c7a864',
+    backgroundColor: '#1d342e',
     borderRadius: 8,
     padding: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.1,
     shadowRadius: 3,
     elevation: 3,
     flex: 1,
@@ -3868,8 +5817,8 @@ timeInputSeparator: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingVertical: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
@@ -3893,7 +5842,7 @@ timeInputSeparator: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     paddingVertical: 20,
     backgroundColor: '#fff',
   },
@@ -3956,7 +5905,7 @@ timeInputSeparator: {
   alignItems: 'center',
   justifyContent: 'space-between',
   paddingHorizontal: 20,
-  paddingVertical: 8,
+  paddingVertical: 16,
   backgroundColor: '#faf7f2',
 },
 dailyNavButton: {
@@ -4245,18 +6194,6 @@ calendarDayItemClean: {
   justifyContent: 'center',
   paddingVertical: 4,
   flex: 1,
-  borderRadius: 22,
-  backgroundColor: '#f2e6d4',
-  borderWidth: 1,
-  borderColor: '#e6dbc8',
-},
-calendarDayItemTodayClean: {
-  backgroundColor: '#f2e6d4',
-  borderColor: '#e6dbc8',
-},
-calendarDayItemActiveClean: {
-  backgroundColor: '#c7a864',
-  borderColor: '#c7a864',
 },
 calendarDayLabelClean: {
   fontSize: 10,
@@ -4267,103 +6204,25 @@ calendarDayLabelClean: {
   position: 'absolute',
   top: -18,
 },
-calendarDayLabelTodayClean: {
-  color: '#9CA3AF',
-},
-calendarDayLabelActiveClean: {
-  color: '#ffffff',
-},
 calendarDayCircleClean: {
   width: 44,
   height: 44,
   borderRadius: 22,
   alignItems: 'center',
   justifyContent: 'center',
-  backgroundColor: '#f2e6d4',
-  borderWidth: 1,
-  borderColor: '#e6dbc8',
+  backgroundColor: 'transparent',
 },
-calendarDayCircleTodayClean: {
-  backgroundColor: '#f2e6d4',
-  borderColor: '#e6dbc8',
-},
-calendarDayCircleActiveClean: {
+ calendarDayCircleActiveClean: {
   backgroundColor: '#c7a864',
-  borderColor: '#c7a864',
 },
 calendarDayNumberClean: {
   fontSize: 20,
   fontWeight: '600',
   color: '#1F2937',
 },
-calendarDayNumberTodayClean: {
-  color: '#1F2937',
-  fontWeight: '600',
-},
 calendarDayNumberActiveClean: {
     color: '#fff',
     fontWeight: '800',
-  },
-  // Add these after calendarDayNumberActiveClean
-modalCardLarge: {
-  backgroundColor: '#fff',
-  borderRadius: 16,
-  padding: 20,
-  width: '92%',
-  maxWidth: 500,           // Increased from 400
-  maxHeight: '90%',        // Increased from 85%
-  minHeight: 400,          // ADD THIS - ensures minimum height
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.25,
-  shadowRadius: 8,
-  elevation: 5,
-},
-  userRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  userName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
-  },
-  userDetails: {
-    fontSize: 12,
-    color: '#6b7280',
-    marginTop: 2,
-  },
-  roleBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    backgroundColor: '#e5e7eb',
-  },
-  roleBtnActive: {
-    backgroundColor: '#c7a864',
-  },
-  roleBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  deleteBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-    backgroundColor: '#ef4444',
-  },
-  deleteBtnText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  picker: {
-    height: 50,
-    marginBottom: 12,
   },
   viewSwitcherDropdownHeader: {
     position: 'absolute',
@@ -4385,8 +6244,8 @@ modalCardLarge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
   },
@@ -4404,7 +6263,7 @@ modalCardLarge: {
   },
   calendarViewSwitcher: {
     paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingVertical: 12,
     backgroundColor: '#faf7f2',
     position: 'relative',
     zIndex: 1000,
@@ -4414,8 +6273,8 @@ modalCardLarge: {
     alignItems: 'center',
     gap: 10,
     backgroundColor: '#fff',
-    paddingVertical: 14,
-    paddingHorizontal: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E5E7EB',
@@ -4442,7 +6301,7 @@ modalCardLarge: {
     borderColor: '#E5E7EB',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 5,
     zIndex: 1001,
@@ -4452,7 +6311,7 @@ modalCardLarge: {
     alignItems: 'center',
     gap: 12,
     paddingVertical: 14,
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
   },
@@ -4479,7 +6338,7 @@ modalCardLarge: {
   dailyNavButton: {
     width: 40,
     height: 40,
-    borderRadius: 24,
+    borderRadius: 20,
     backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
@@ -4492,7 +6351,7 @@ modalCardLarge: {
   dailyDateDisplay: {
     flex: 1,
     alignItems: 'center',
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
   },
   dailyDateText: {
     fontSize: 20,
@@ -4502,200 +6361,6 @@ modalCardLarge: {
   },
   dailyDateTextToday: {
     color: '#c7a864',
-  },
-  dailyTimelineWrapper: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 34,
-    gap: 16,
-  },
-  dailyTimelineHours: {
-    width: 42,
-    gap: 0,
-  },
-  dailyHourRow: {
-    justifyContent: 'flex-start',
-    alignItems: 'flex-end',
-    paddingBottom: 8,
-    paddingRight: 12,
-  },
-  dailyHourLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#9CA3AF',
-    letterSpacing: 0.3,
-  },
-  dailyHourLabelSuffix: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#D1D5DB',
-  },
-    dailyMinuteLabel: {
-    fontSize: 10,
-    fontWeight: '500',
-    color: '#D1D5DB',
-    opacity: 0.7,
-  },
-dailyTimelineBody: {
-    flex: 1,
-    backgroundColor: 'transparent',
-    borderRadius: 0,
-    paddingVertical: 0,
-    paddingHorizontal: 0,
-    borderWidth: 0,
-    borderColor: 'transparent',
-    shadowColor: 'transparent',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    elevation: 0,
-  },
-  dailyTimelineGrid: {
-    position: 'relative',
-  },
-  dailyTimelineLine: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: '#f5f1eb',
-    opacity: 0.5,
-  },
-  dailyTimelineLineHour: {
-    height: 1,
-    backgroundColor: '#ede3d4',
-    opacity: 0.6,
-  },
-  dailyCurrentTimeIndicator: {
-    position: 'absolute',
-    left: -16,
-    right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    zIndex: 1,
-  },
-  dailyCurrentTimeDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#d64545',
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  dailyCurrentTimeLine: {
-    flex: 1,
-    height: 2,
-    backgroundColor: '#d64545',
-    marginLeft: 6,
-    borderRadius: 2,
-  },
-dailyTimelineEmpty: {
-    position: 'absolute',
-    top: '12%',
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    paddingHorizontal: 40,
-  },
-  dailyEmptyStateTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#7b8277',
-    letterSpacing: 0.3,
-  },
-  dailyEmptyStateSubtitle: {
-    fontSize: 14,
-    color: '#9c894d',
-    textAlign: 'center',
-    fontWeight: '500',
-  },
-  dailyTimelineCard: {
-    position: 'absolute',
-    left: 8,
-    right: 8,
-    zIndex: 2,
-    borderRadius: 14,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#ede4d6',
-    shadowColor: '#d9ccbc',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.18,
-    shadowRadius: 18,
-    elevation: 6,
-    overflow: 'hidden',
-  },
-  dailyTimelineCardAccent: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    borderTopLeftRadius: 14,
-    borderBottomLeftRadius: 14,
-  },
-  dailyTimelineCardContent: {
-    marginLeft: 12,
-    gap: 8,
-  },
-  dailyTimelineCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  dailyTimelineDurationChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 2,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'transparent',
-    gap: 4,
-  },
-  dailyTimelineDurationText: {
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 0.2,
-  },
-  dailyTimelineCardTime: {
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: 0.25,
-  },
-  dailyTimelineCardPrimary: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1d342e',
-    letterSpacing: 0.2,
-  },
-  dailyTimelineCardSecondary: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#586360',
-    letterSpacing: 0.18,
-  },
-  dailyTimelineCardMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#ede3d4',
-    backgroundColor: '#f8f3ea',
-  },
-  dailyTimelineCardMetaText: {
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 0.2,
   },
   headerMenuButton: {
   width: 44,
@@ -4879,664 +6544,4 @@ statusBadgeTextModified: {
   fontSize: 10,
   fontWeight: '700',
 },
-// Add these to the styles object (around line 2800+)
-
-  // Settings Modal Styles
-settingsModalCard: {
-  backgroundColor: '#fff',
-  borderRadius: 20,
-  width: '92%',
-  maxWidth: 480,
-  height: '80%',
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 4 },
-  shadowOpacity: 0.25,
-  shadowRadius: 12,
-  elevation: 8,
-  overflow: 'hidden',
-  display: 'flex',
-  flexDirection: 'column',
-},
-  settingsModalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    backgroundColor: '#F9FAFB',
-  },
-  settingsModalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  settingsCloseBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  settingsTabs: {
-    flexDirection: 'row',
-    paddingHorizontal: 18,
-    paddingTop: 12,
-    gap: 8,
-    backgroundColor: '#F9FAFB',
-  },
-  settingsTab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: 'transparent',
-  },
-  settingsTabActive: {
-    backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.12,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  settingsTabText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6B7280',
-  },
-  settingsTabTextActive: {
-    color: '#1d342e',
-    fontWeight: '700',
-  },
-  settingsScrollView: {
-    flex: 1,
-  },
-  // Add this in your styles object (around line 2400):
-tabBar: {
-  backgroundColor: '#fff',
-  borderTopWidth: 1,
-  borderTopColor: '#E5E7EB',
-  height: 105,
-  paddingBottom: 20,
-  paddingTop: 8,
-  marginBottom: 12,
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: -2 },
-  shadowOpacity: 0.05,
-  shadowRadius: 8,
-  elevation: 8,
-},
-  settingsScrollContent: {
-    padding: 20,
-  },
-  settingsSection: {
-    gap: 20,
-  },
-  settingsGroup: {
-    gap: 8,
-  },
-  settingsLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 4,
-  },
-  settingsBtn: {
-    backgroundColor: '#c7a864',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 8,
-  },
-  settingsBtnText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  settingsBtnSecondary: {
-    backgroundColor: '#F3F4F6',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-  },
-  settingsBtnSecondaryText: {
-    color: '#374151',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  languageButtons: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 4,
-  },
-  langBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#fff',
-  },
-  langBtnActive: {
-    borderColor: '#1d342e',
-    backgroundColor: '#c7a864',
-  },
-  langBtnText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#6B7280',
-  },
-  langBtnTextActive: {
-    color: '#fff',
-  },
-  signOutBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#EF4444',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    marginTop: 8,
-  },
-  signOutBtnText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  
-  // Admin Panel Styles
-  adminHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  adminTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  addUserBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#c7a864',
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-  },
-  addUserBtnText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  searchInput: {
-    marginBottom: 12,
-  },
-  usersList: {
-    gap: 12,
-  },
-  userCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  userInfo: {
-    flex: 1,
-    marginRight: 12,
-  },
-  userCardName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  userCardEmail: {
-    fontSize: 13,
-    color: '#6B7280',
-    marginBottom: 2,
-  },
-  userCardPhone: {
-    fontSize: 13,
-    color: '#6B7280',
-  },
-  userActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  roleButtons: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  roleToggle: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#fff',
-  },
-  roleToggleActive: {
-    borderColor: '#1d342e',
-    backgroundColor: '#c7a864',
-  },
-  roleToggleText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#6B7280',
-  },
-  roleToggleTextActive: {
-    color: '#fff',
-  },
-  deleteUserBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: '#FEF2F2',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  
-  // Add User Modal
-  addUserModal: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
-    width: '90%',
-    maxWidth: 400,
-  },
-  addUserHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  addUserTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  addUserActions: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 20,
-  },
-  dailyTimeRow: {
-  flexDirection: 'row',
-  minHeight: 80,
-  borderBottomWidth: 1,
-  borderBottomColor: '#efe2cf',
-  backgroundColor: '#faf7f2',
-},
-dailyTimeLabel: {
-  width: 80,
-  paddingTop: 8,
-  paddingHorizontal: 8,
-  alignItems: 'flex-end',
-  justifyContent: 'flex-start',
-},
-dailyTimeLabelText: {
-  fontSize: 14,
-  fontWeight: '700',
-  color: '#7b8277',
-  textAlign: 'right',
-  letterSpacing: 0.3,
-},
-dailyTimeSlot: {
-  flex: 1,
-  padding: 8,
-  justifyContent: 'center',
-  alignItems: 'center',
-},
-dailyTimeSlotCurrent: {
-  backgroundColor: '#f9f3ec',
-  borderLeftWidth: 3,
-  borderLeftColor: '#c7a864',
-},
-dailyEmptySlot: {
-  flex: 1,
-  width: '100%',
-  alignItems: 'center',
-  justifyContent: 'center',
-  borderRadius: 12,
-  borderWidth: 2,
-  borderColor: '#ede3d4',
-  borderStyle: 'dashed',
-  backgroundColor: '#fff',
-  minHeight: 64,
-},
-dailyEmptySlotText: {
-  fontSize: 36,
-  color: '#9c894d',
-  fontWeight: '400',
-},
-dailyBookingsContainer: {
-  flex: 1,
-  gap: 8,
-  width: '100%',
-},
-dailyBooking: {
-  backgroundColor: '#1d342e',
-  borderRadius: 12,
-  padding: 12,
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.1,
-  shadowRadius: 4,
-  elevation: 3,
-},
-dailyBookingClient: {
-  fontSize: 16,
-  fontWeight: '700',
-  color: '#fff',
-  marginBottom: 4,
-},
-dailyBookingService: {
-  fontSize: 14,
-  color: 'rgba(255, 255, 255, 0.9)',
-  marginBottom: 4,
-},
-dailyBookingTime: {
-  fontSize: 13,
-  color: 'rgba(255, 255, 255, 0.8)',
-  fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  fontWeight: '600',
-},
-  // Month Navigation Header
-  monthNavigationHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#faf7f2',
-  },
-  monthNavButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 24,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#ede3d4',
-  },
-  monthYearText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1d342e',
-    letterSpacing: 0.3,
-  },
-  // Week Navigator Styles
-  weekNavigator: {
-    backgroundColor: '#faf7f2',
-    borderBottomWidth: 1,
-    borderBottomColor: '#efe2cf',
-    paddingVertical: 14,
-  },
-  weekScrollContent: {
-    paddingHorizontal: 20,
-    gap: 12,
-  },
-  weekDayItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    borderRadius: 18,
-    backgroundColor: '#f5f1eb',
-    borderWidth: 1,
-    borderColor: '#ede3d4',
-    minWidth: 64,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  weekDayItemToday: {
-    borderColor: '#d9cbb5',
-    backgroundColor: '#fffdf8',
-    borderWidth: 1,
-    borderColor: '#efe2cf',
-  },
-  weekDayItemSelected: {
-    backgroundColor: '#c7a864',
-    borderColor: '#1d342e',
-    shadowColor: '#1d342e',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
-    elevation: 6,
-  },
-  weekDayLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#7b8277',
-    marginBottom: 4,
-    letterSpacing: 0.5,
-  },
-  weekDayLabelActive: {
-    color: '#fff',
-  },
-  weekDayNumber: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1f2c28',
-  },
-  weekDayNumberActive: {
-    color: '#fff',
-  },
-calendarCleanHeader: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'flex-start',
-  gap: 16,
-  paddingHorizontal: 20,
-  paddingVertical: 16,
-  backgroundColor: '#faf7f2',
-  borderBottomWidth: 1,
-  borderBottomColor: '#efe2cf',
-  position: 'relative',
-},
-calendarHeaderMinimal: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  paddingHorizontal: 20,
-  paddingTop: 4,
-  paddingBottom: 12,
-  backgroundColor: '#faf7f2',
-  borderBottomWidth: 1,
-  borderBottomColor: '#efe2cf',
-},
-calendarHeaderIconButton: {
-  padding: 6,
-},
-calendarHeaderCenterWrapper: {
-  flex: 1,
-  alignItems: 'center',
-  position: 'relative',
-  width: '100%',
-},
-calendarHeaderCenterBlock: {
-  width: '100%',
-  paddingHorizontal: 16,
-  alignItems: 'center',
-  paddingVertical: 6,
-},
-calendarHeaderDayText: {
-  fontSize: 18,
-  fontWeight: '700',
-  color: '#1d342e',
-},
-calendarHeaderTimeRow: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  gap: 6,
-  marginTop: 2,
-},
-calendarHeaderTimeText: {
-  fontSize: 13,
-  color: '#7b8277',
-  fontWeight: '500',
-},
-calendarHeaderEndActions: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  gap: 8,
-},
-calendarMenuButton: {
-  width: 44,
-  height: 44,
-  borderRadius: 22,
-  backgroundColor: '#fff',
-  alignItems: 'center',
-  justifyContent: 'center',
-  borderWidth: 1,
-  borderColor: '#ede3d4',
-},
-calendarHeaderTitle: {
-  fontSize: 20,
-  fontWeight: '700',
-  color: '#1d342e',
-  letterSpacing: 0.3,
-},
-calendarCleanDropdown: {
-  position: 'absolute',
-  top: 56,
-  left: 0,
-  right: 0,
-  marginTop: 8,
-  alignSelf: 'center',
-  backgroundColor: '#fff',
-  borderRadius: 12,
-  borderWidth: 1,
-  borderColor: '#ede3d4',
-  shadowColor: '#000',
-  shadowOffset: { width: 0, height: 4 },
-  shadowOpacity: 0.1,
-  shadowRadius: 12,
-  elevation: 8,
-  minWidth: 180,
-  zIndex: 1000,
-},
-calendarCleanOption: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  gap: 12,
-  paddingVertical: 14,
-  paddingHorizontal: 16,
-  borderBottomWidth: 1,
-  borderBottomColor: '#f9f3ec',
-},
-calendarCleanOptionActive: {
-  backgroundColor: '#f9f3ec',
-},
-calendarCleanOptionText: {
-  fontSize: 15,
-  fontWeight: '500',
-  color: '#7b8277',
-},
-calendarCleanOptionTextActive: {
-  color: '#c7a864',
-  fontWeight: '700',
-},
-dailyEmptyStateSubtitle: {
-    fontSize: 14,
-    color: '#9c894d',
-    textAlign: 'center',
-    fontWeight: '500',
-  },
-  emptyStateButton: {
-    marginTop: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    backgroundColor: '#c7a864',
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  emptyStateButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#fff',
-    letterSpacing: 0.3,
-  },
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
